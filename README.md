@@ -19,7 +19,10 @@ High-performance, production-ready gRPC connection pooling module with active-ac
 
 ## 📦 Installation
 
+### Option 1: Package Manager (When Published)
+
 ```bash
+# Note: This will work once the package is published to npm
 # Using pnpm (recommended)
 pnpm add @stalkchain/grpc-pool
 
@@ -30,11 +33,49 @@ npm install @stalkchain/grpc-pool
 yarn add @stalkchain/grpc-pool
 ```
 
+### Option 2: Direct Repository Setup (Recommended)
+
+If you've downloaded or cloned this repository directly:
+
+```bash
+# Clone the repository
+git clone https://github.com/StalkChain/stalkchain-grpc-pool.git
+cd stalkchain-grpc-pool
+
+# Install dependencies
+pnpm install
+
+# Build the project
+pnpm build
+```
+
+Then in your project, reference it as a local module in your package.json:
+
+```json
+{
+  "name": "your-stalkchain-app",
+  "dependencies": {
+    "@stalkchain/grpc-pool": "file:../modules/stalkchain-grpc-pool",
+    "other-dependencies": "..."
+  }
+}
+```
+
+Or use it directly with require/import:
+
+```javascript
+// If using the built version
+const { createSolanaGrpcPool } = require('./path/to/stalkchain-grpc-pool/dist');
+
+// Or if using TypeScript directly
+import { createSolanaGrpcPool } from './path/to/stalkchain-grpc-pool/src';
+```
+
 ## 🔧 Quick Start
 
 ### 1. Environment Setup
 
-Create a `.env` file:
+Create a `.env` file in your project root:
 
 ```bash
 cp .env.example .env
@@ -49,7 +90,13 @@ SOLANA_TRACKER_API_KEY=your_api_key_here
 ### 2. Basic Usage
 
 ```typescript
+// If installed via package manager
 import { createSolanaGrpcPool } from '@stalkchain/grpc-pool';
+
+// If using local repository
+import { createSolanaGrpcPool } from './path/to/stalkchain-grpc-pool/dist';
+// or
+const { createSolanaGrpcPool } = require('./path/to/stalkchain-grpc-pool/dist');
 
 // Create pool with multiple endpoints
 const pool = createSolanaGrpcPool({
@@ -113,18 +160,48 @@ await pool.subscribe({
 
 ## 🧪 Testing
 
-Run the included test to verify everything works:
+### For Local Repository Setup
+
+Run the included tests to verify everything works:
+
+```bash
+# First, make sure you have built the project
+pnpm build
+
+# Run the basic pool test
+node test-pool.js
+
+# Test error handling and retry behavior
+node test-retry.js
+
+# Test original issue fix (401 error handling)
+node test-original-issue.js
+
+# Or use the npm script
+pnpm run test:pool
+```
+
+### For Package Installation
 
 ```bash
 # Build and test
 pnpm run test:pool
 ```
 
-This will:
+The tests will:
 - Connect to all configured endpoints
 - Show real-time transaction signatures
 - Display deduplication statistics
 - Monitor connection health
+- Test error handling and automatic retry behavior
+- Verify the pool continues working even when individual connections fail
+
+### Test Files Description
+
+- **`test-pool.js`**: Basic functionality test with all endpoints
+- **`test-retry.js`**: Tests retry behavior when connections fail
+- **`test-original-issue.js`**: Verifies the fix for 401 authentication errors
+- **`test-error-handling.js`**: Comprehensive error handling validation
 
 ## 📊 Performance
 
@@ -190,6 +267,62 @@ The pool implements several key patterns:
 - `getHealthStatus()`: Get connection health
 - `getMetrics()`: Get performance metrics
 - `isRunning()`: Check if pool is running
+
+## 🛠️ Local Development
+
+If you're developing with the local repository:
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/StalkChain/stalkchain-grpc-pool.git
+   cd stalkchain-grpc-pool
+   ```
+
+2. Install dependencies:
+   ```bash
+   pnpm install
+   ```
+
+3. Build the project:
+   ```bash
+   pnpm build
+   ```
+
+4. Run tests:
+   ```bash
+   node test-pool.js
+   ```
+
+5. Make your changes to the TypeScript source in the `src` directory
+
+6. Rebuild after changes:
+   ```bash
+   pnpm build
+   ```
+
+### Using in Another Project During Development
+
+You can link your local copy to another project:
+
+1. In the stalkchain-grpc-pool directory:
+   ```bash
+   pnpm link --global
+   ```
+
+2. In your project directory:
+   ```bash
+   pnpm link --global @stalkchain/grpc-pool
+   ```
+
+Or reference it directly in your package.json:
+
+```json
+{
+  "dependencies": {
+    "@stalkchain/grpc-pool": "file:../path/to/stalkchain-grpc-pool"
+  }
+}
+```
 
 ## 🤝 Contributing
 
