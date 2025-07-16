@@ -31,7 +31,7 @@ export class PoolFactory {
    * Create a gRPC pool with default configuration
    */
   public static createDefault(
-    connections: Array<{ endpoint: string; token: string }>,
+    connections: Array<{ endpoint: string; token: string; noPing?: boolean }>,
     options: PoolFactoryOptions = {}
   ): PoolManager {
     const logger = options.logger || createDefaultLogger();
@@ -48,7 +48,7 @@ export class PoolFactory {
    * Optimized for 99.99% SLA requirements
    */
   public static createHighAvailability(
-    connections: Array<{ endpoint: string; token: string }>,
+    connections: Array<{ endpoint: string; token: string; noPing?: boolean }>,
     options: PoolFactoryOptions = {}
   ): PoolManager {
     const logger = options.logger || createDefaultLogger();
@@ -65,7 +65,7 @@ export class PoolFactory {
    * Optimized for development and testing
    */
   public static createDevelopment(
-    connections: Array<{ endpoint: string; token: string }>,
+    connections: Array<{ endpoint: string; token: string; noPing?: boolean }>,
     options: PoolFactoryOptions = {}
   ): PoolManager {
     const logger = options.logger || createDefaultLogger();
@@ -112,7 +112,7 @@ export class PoolFactory {
    * Create a gRPC pool for Solana/Yellowstone monitoring
    */
   public static createSolanaPool(
-    connections: Array<{ endpoint: string; token: string }>,
+    connections: Array<{ endpoint: string; token: string; noPing?: boolean }>,
     options: PoolFactoryOptions = {}
   ): PoolManager {
     const logger = options.logger || createDefaultLogger();
@@ -143,7 +143,7 @@ export class PoolFactory {
    * Create a gRPC pool for testing
    */
   public static createForTesting(
-    connections: Array<{ endpoint: string; token: string }>,
+    connections: Array<{ endpoint: string; token: string; noPing?: boolean }>,
     options: PoolFactoryOptions = {}
   ): PoolManager {
     const config = createDevelopmentPoolConfig(connections, {
@@ -176,7 +176,7 @@ export class PoolFactory {
  * Convenience function to create a default gRPC pool
  */
 export function createGrpcPool(
-  connections: Array<{ endpoint: string; token: string }>,
+  connections: Array<{ endpoint: string; token: string; noPing?: boolean }>,
   options: PoolFactoryOptions = {}
 ): PoolManager {
   return PoolFactory.createDefault(connections, options);
@@ -186,7 +186,7 @@ export function createGrpcPool(
  * Convenience function to create a high-availability gRPC pool
  */
 export function createHighAvailabilityGrpcPool(
-  connections: Array<{ endpoint: string; token: string }>,
+  connections: Array<{ endpoint: string; token: string; noPing?: boolean }>,
   options: PoolFactoryOptions = {}
 ): PoolManager {
   return PoolFactory.createHighAvailability(connections, options);
@@ -196,7 +196,7 @@ export function createHighAvailabilityGrpcPool(
  * Convenience function to create a Solana gRPC pool
  */
 export function createSolanaGrpcPool(
-  connections: Array<{ endpoint: string; token: string }>,
+  connections: Array<{ endpoint: string; token: string; noPing?: boolean }>,
   options: PoolFactoryOptions = {}
 ): PoolManager {
   return PoolFactory.createSolanaPool(connections, options);
@@ -206,7 +206,7 @@ export function createSolanaGrpcPool(
  * Builder pattern for creating gRPC pools
  */
 export class PoolBuilder {
-  private connections: Array<{ endpoint: string; token: string }> = [];
+  private connections: Array<{ endpoint: string; token: string; noPing?: boolean }> = [];
   private config: Partial<PoolConfig> = {};
   private logger?: Logger;
   private enableHealthMonitoring: boolean = true;
@@ -215,15 +215,19 @@ export class PoolBuilder {
   /**
    * Add a connection to the pool
    */
-  public addConnection(endpoint: string, token: string): this {
-    this.connections.push({ endpoint, token });
+  public addConnection(endpoint: string, token: string, noPing?: boolean): this {
+    this.connections.push({
+      endpoint,
+      token,
+      ...(noPing !== undefined && { noPing })
+    });
     return this;
   }
 
   /**
    * Add multiple connections to the pool
    */
-  public addConnections(connections: Array<{ endpoint: string; token: string }>): this {
+  public addConnections(connections: Array<{ endpoint: string; token: string; noPing?: boolean }>): this {
     this.connections.push(...connections);
     return this;
   }

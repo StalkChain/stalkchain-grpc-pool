@@ -12,6 +12,7 @@ export {
   PoolConfig,
   CircuitBreakerConfig,
   BatchConfig,
+  StreamPingConfig,
   HealthMetrics,
   ConnectionState,
   CircuitBreakerState,
@@ -23,8 +24,17 @@ export {
 } from './types';
 
 // Utility exports
-export { createDefaultLogger } from './utils/logger';
-export { createDefaultPoolConfig } from './utils/config';
+export { createDefaultLogger, LogLevel } from './utils/logger';
+export {
+  createDefaultPoolConfig,
+  createDefaultStreamPingConfig
+} from './utils/config';
+export {
+  GracefulShutdownManager,
+  getGracefulShutdownManager,
+  registerPoolForGracefulShutdown,
+  performGracefulShutdown
+} from './utils/graceful-shutdown';
 
 // Factory functions for easy setup
 export {

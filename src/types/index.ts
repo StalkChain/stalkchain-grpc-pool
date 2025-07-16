@@ -20,6 +20,22 @@ export interface ConnectionConfig {
   requestTimeout: number;
   /** Custom gRPC options */
   grpcOptions?: Record<string, unknown>;
+  /** Skip ping health checks for this connection (useful for public endpoints) */
+  noPing?: boolean;
+}
+
+/**
+ * Configuration for stream ping/pong keep-alive functionality
+ */
+export interface StreamPingConfig {
+  /** Enable stream ping/pong keep-alive */
+  enabled: boolean;
+  /** Interval between ping messages in milliseconds */
+  interval: number;
+  /** Timeout for pong response in milliseconds */
+  timeout: number;
+  /** Maximum number of missed pongs before considering stream stale */
+  maxMissedPongs: number;
 }
 
 /**
@@ -40,6 +56,10 @@ export interface PoolConfig {
   enableMetrics: boolean;
   /** Custom logger */
   logger?: Logger;
+  /** Message timeout in milliseconds - connection considered stale if no messages received within this time */
+  messageTimeout?: number;
+  /** Stream ping configuration for keep-alive functionality */
+  streamPing?: StreamPingConfig;
 }
 
 /**
@@ -84,6 +104,8 @@ export interface HealthMetrics {
   lastSuccessTime: number;
   /** Number of consecutive failures */
   consecutiveFailures: number;
+  /** Timestamp of last message received */
+  lastMessageTime?: number;
   /** Last error message if any */
   lastError?: string;
 }

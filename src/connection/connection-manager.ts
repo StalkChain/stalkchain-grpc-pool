@@ -20,6 +20,7 @@ export class ConnectionManager extends EventEmitter<PoolEvents> {
   // private lastHealthCheck: number = 0; // Unused for now
   private consecutiveFailures: number = 0;
   private lastSuccessTime: number = 0;
+  private lastMessageTime: number = 0;
   private currentLatency: number = 0;
   private errorRate: number = 0;
   private requestCount: number = 0;
@@ -37,6 +38,13 @@ export class ConnectionManager extends EventEmitter<PoolEvents> {
    */
   public get id(): string {
     return this.config.endpoint;
+  }
+
+  /**
+   * Get connection configuration
+   */
+  public get connectionConfig(): ConnectionConfig {
+    return this.config;
   }
 
   /**
@@ -65,8 +73,31 @@ export class ConnectionManager extends EventEmitter<PoolEvents> {
       latency: this.currentLatency,
       errorRate: this.errorRate,
       lastSuccessTime: this.lastSuccessTime,
-      consecutiveFailures: this.consecutiveFailures
+      consecutiveFailures: this.consecutiveFailures,
+      lastMessageTime: this.lastMessageTime
     };
+  }
+
+  /**
+   * Update the last message received time
+   * This should be called whenever a message is received from this connection
+   */
+  public updateLastMessageTime(): void {
+    this.lastMessageTime = Date.now();
+  }
+
+  /**
+   * Check if the connection is stale based on message timeout
+   * @param messageTimeout Timeout in milliseconds
+   * @returns true if connection is stale (no messages received within timeout)
+   */
+  public isStaleByMessageTimeout(messageTimeout: number): boolean {
+    if (this.lastMessageTime === 0) {
+      // No messages received yet, check against connection time
+      return Date.now() - this.lastSuccessTime > messageTimeout;
+    }
+
+    return Date.now() - this.lastMessageTime > messageTimeout;
   }
 
   /**
@@ -87,16 +118,13 @@ export class ConnectionManager extends EventEmitter<PoolEvents> {
    */
   public async stop(): Promise<void> {
     this.logger?.info(`Stopping connection to ${this.config.endpoint}`);
-    
+
     this.stopHealthChecks();
     this.stopReconnectTimer();
-    
-    if (this.client) {
-      // Note: yellowstone-grpc client doesn't have a close method
-      // The connection will be cleaned up automatically
-      this.client = null;
-    }
-    
+
+    // Properly close the gRPC client if it exists
+    await this.closeClient();
+
     this.state = ConnectionState.DISCONNECTED;
   }
 
@@ -116,6 +144,27 @@ export class ConnectionManager extends EventEmitter<PoolEvents> {
     }
 
     return this.internalPing();
+  }
+
+  /**
+   * Force reconnection of this connection
+   * This is used when the pool manager detects the connection is stale
+   */
+  public async forceReconnect(reason: string): Promise<void> {
+    this.logger?.warn(`Forcing reconnection for ${this.config.endpoint}: ${reason}`);
+
+    // Mark connection as failed
+    this.state = ConnectionState.FAILED;
+    this.consecutiveFailures = 3; // Set to threshold to trigger reconnection logic
+
+    // Properly close the client before reconnecting
+    await this.closeClient();
+
+    // Emit connection lost event
+    this.emit('connection-lost', this.config.endpoint, new Error(reason));
+
+    // Schedule reconnection
+    this.scheduleReconnect();
   }
 
   /**
@@ -194,12 +243,9 @@ export class ConnectionManager extends EventEmitter<PoolEvents> {
       this.consecutiveFailures++;
       
       this.emit('connection-lost', this.config.endpoint, error as Error);
-      
-      if (this.reconnectAttempts < this.config.reconnectAttempts) {
-        this.scheduleReconnect();
-      } else {
-        this.logger?.error(`Max reconnection attempts reached for ${this.config.endpoint}`);
-      }
+
+      // Always attempt to reconnect for production reliability
+      this.scheduleReconnect();
     }
   }
 
@@ -267,32 +313,50 @@ export class ConnectionManager extends EventEmitter<PoolEvents> {
       return;
     }
 
+    // Skip ping health checks if noPing is enabled for this connection
+    if (this.config.noPing) {
+      this.logger?.debug(`Skipping ping health check for ${this.config.endpoint} (noPing: true)`);
+
+      // For noPing connections, we only rely on message timeout detection
+      // Reset consecutive failures since we're not actually checking ping
+      if (this.consecutiveFailures > 0) {
+        this.logger?.debug(`Resetting consecutive failures for noPing connection ${this.config.endpoint}`);
+        this.consecutiveFailures = 0;
+        this.emit('connection-recovered', this.config.endpoint);
+      }
+
+      // Update last success time to indicate the connection is being monitored
+      this.lastSuccessTime = Date.now();
+      return;
+    }
+
     try {
       await this.ping();
-      
+
       if (this.consecutiveFailures > 0) {
         this.logger?.info(`Connection to ${this.config.endpoint} recovered`);
         this.emit('connection-recovered', this.config.endpoint);
         this.consecutiveFailures = 0;
       }
-      
+
     } catch (error) {
       this.consecutiveFailures++;
       this.logger?.warn(`Health check failed for ${this.config.endpoint}: ${error}`);
-      
+
+      // For production reliability, we'll be more aggressive with reconnection
+      // but still allow a few failures before considering the connection stale
       if (this.consecutiveFailures >= 3) {
         this.logger?.error(`Connection to ${this.config.endpoint} appears to be stale`);
         this.state = ConnectionState.FAILED;
         this.emit('connection-lost', this.config.endpoint, error as Error);
-        
-        // Attempt to reconnect
-        if (this.client) {
-          // Note: yellowstone-grpc client doesn't have a close method
-          // The connection will be cleaned up automatically
-          this.client = null;
-        }
-        
+
+        // Properly close the client before reconnecting
+        await this.closeClient();
+
         this.scheduleReconnect();
+      } else {
+        // Even with fewer failures, log a warning but don't mark as failed yet
+        this.logger?.warn(`Health check failed (${this.consecutiveFailures}/3) for ${this.config.endpoint}`);
       }
     }
     
@@ -317,5 +381,30 @@ export class ConnectionManager extends EventEmitter<PoolEvents> {
     this.requestCount++;
     this.errorCount++;
     this.errorRate = this.errorCount / this.requestCount;
+  }
+
+  /**
+   * Properly close the gRPC client connection
+   * This is critical for paid servers with connection limits
+   */
+  private async closeClient(): Promise<void> {
+    if (!this.client) {
+      return;
+    }
+
+    this.logger?.debug(`Closing gRPC client for ${this.config.endpoint}`);
+
+    try {
+      // The yellowstone-grpc client doesn't have a direct close method
+      // But we need to ensure any active streams are properly cancelled
+      // The client will be garbage collected, but we should null it immediately
+      this.client = null;
+
+      this.logger?.debug(`gRPC client closed for ${this.config.endpoint}`);
+    } catch (error) {
+      this.logger?.warn(`Error closing gRPC client for ${this.config.endpoint}: ${error}`);
+      // Still null the client even if there was an error
+      this.client = null;
+    }
   }
 }

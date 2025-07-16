@@ -1,5 +1,18 @@
-import { PoolConfig, ConnectionConfig, CircuitBreakerConfig, BatchConfig } from '../types';
+import { PoolConfig, ConnectionConfig, CircuitBreakerConfig, BatchConfig, StreamPingConfig } from '../types';
 import { createDefaultLogger } from './logger';
+
+/**
+ * Create default stream ping configuration
+ */
+export function createDefaultStreamPingConfig(overrides: Partial<StreamPingConfig> = {}): StreamPingConfig {
+  return {
+    enabled: false, // Disabled by default
+    interval: 30000, // 30 seconds between pings
+    timeout: 10000, // 10 seconds timeout for pong response
+    maxMissedPongs: 3, // Allow 3 missed pongs before considering stream stale
+    ...overrides
+  };
+}
 
 /**
  * Create default connection configuration
@@ -61,11 +74,13 @@ export function createDefaultBatchConfig(
  * Create default pool configuration
  */
 export function createDefaultPoolConfig(
-  connections: Array<{ endpoint: string; token: string }>,
+  connections: Array<{ endpoint: string; token: string; noPing?: boolean }>,
   overrides: Partial<PoolConfig> = {}
 ): PoolConfig {
   const connectionConfigs = connections.map(conn =>
-    createDefaultConnectionConfig(conn.endpoint, conn.token)
+    createDefaultConnectionConfig(conn.endpoint, conn.token, {
+      ...(conn.noPing !== undefined && { noPing: conn.noPing })
+    })
   );
 
   return {
@@ -75,6 +90,8 @@ export function createDefaultPoolConfig(
     circuitBreaker: createDefaultCircuitBreakerConfig(),
     batchProcessing: createDefaultBatchConfig(),
     enableMetrics: true,
+    messageTimeout: 300000, // 5 minutes - connection considered stale if no messages received
+    streamPing: createDefaultStreamPingConfig(),
     logger: createDefaultLogger(),
     ...overrides
   };
@@ -85,16 +102,17 @@ export function createDefaultPoolConfig(
  * Optimized for 99.99% SLA requirements
  */
 export function createHighAvailabilityPoolConfig(
-  connections: Array<{ endpoint: string; token: string }>,
+  connections: Array<{ endpoint: string; token: string; noPing?: boolean }>,
   overrides: Partial<PoolConfig> = {}
 ): PoolConfig {
   const connectionConfigs = connections.map(conn =>
     createDefaultConnectionConfig(conn.endpoint, conn.token, {
-      reconnectAttempts: 10,
+      reconnectAttempts: Number.MAX_SAFE_INTEGER, // Effectively unlimited reconnect attempts for production
       reconnectDelay: 500,
       healthCheckInterval: 2000,
       connectionTimeout: 5000,
-      requestTimeout: 3000
+      requestTimeout: 3000,
+      ...(conn.noPing !== undefined && { noPing: conn.noPing })
     })
   );
 
@@ -114,6 +132,13 @@ export function createHighAvailabilityPoolConfig(
       enabled: true
     }),
     enableMetrics: true,
+    messageTimeout: 60000, // 1 minute - aggressive timeout for high-availability
+    streamPing: createDefaultStreamPingConfig({
+      enabled: true, // Enable for high-availability
+      interval: 15000, // 15 seconds - more frequent pings
+      timeout: 5000, // 5 seconds timeout
+      maxMissedPongs: 2 // Only allow 2 missed pongs
+    }),
     logger: createDefaultLogger(),
     ...overrides
   };
@@ -124,7 +149,7 @@ export function createHighAvailabilityPoolConfig(
  * Optimized for development and testing
  */
 export function createDevelopmentPoolConfig(
-  connections: Array<{ endpoint: string; token: string }>,
+  connections: Array<{ endpoint: string; token: string; noPing?: boolean }>,
   overrides: Partial<PoolConfig> = {}
 ): PoolConfig {
   const connectionConfigs = connections.map(conn =>
@@ -133,7 +158,8 @@ export function createDevelopmentPoolConfig(
       reconnectDelay: 2000,
       healthCheckInterval: 10000,
       connectionTimeout: 15000,
-      requestTimeout: 10000
+      requestTimeout: 10000,
+      ...(conn.noPing !== undefined && { noPing: conn.noPing })
     })
   );
 
@@ -153,6 +179,13 @@ export function createDevelopmentPoolConfig(
       enabled: false // Disabled for easier debugging
     }),
     enableMetrics: true,
+    messageTimeout: 600000, // 10 minutes - relaxed timeout for development
+    streamPing: createDefaultStreamPingConfig({
+      enabled: false, // Disabled for development to reduce noise
+      interval: 60000, // 1 minute if enabled
+      timeout: 15000, // 15 seconds timeout
+      maxMissedPongs: 5 // Allow more missed pongs in development
+    }),
     logger: createDefaultLogger(),
     ...overrides
   };
@@ -193,6 +226,25 @@ export function validatePoolConfig(config: PoolConfig): string[] {
 
   if (config.maxCacheSize < 100) {
     errors.push('maxCacheSize must be >= 100');
+  }
+
+  if (config.messageTimeout !== undefined && config.messageTimeout < 1000) {
+    errors.push('messageTimeout must be >= 1000ms');
+  }
+
+  if (config.streamPing) {
+    if (config.streamPing.interval < 1000) {
+      errors.push('streamPing.interval must be >= 1000ms');
+    }
+    if (config.streamPing.timeout < 1000) {
+      errors.push('streamPing.timeout must be >= 1000ms');
+    }
+    if (config.streamPing.maxMissedPongs < 1) {
+      errors.push('streamPing.maxMissedPongs must be >= 1');
+    }
+    if (config.streamPing.timeout >= config.streamPing.interval) {
+      errors.push('streamPing.timeout must be less than streamPing.interval');
+    }
   }
 
   if (config.circuitBreaker.errorThresholdPercentage < 0 || config.circuitBreaker.errorThresholdPercentage > 100) {

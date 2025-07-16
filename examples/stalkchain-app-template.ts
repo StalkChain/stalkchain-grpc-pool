@@ -7,8 +7,7 @@
  */
 
 import express from 'express';
-import { createSolanaGrpcPool } from '@stalkchain/grpc-pool';
-import { createDefaultLogger, LogLevel } from '@stalkchain/grpc-pool';
+import { createSolanaGrpcPool, createDefaultLogger, LogLevel } from '@stalkchain/grpc-pool';
 
 // Environment configuration
 const config = {
