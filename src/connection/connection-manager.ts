@@ -160,8 +160,9 @@ export class ConnectionManager extends EventEmitter<PoolEvents> {
     // Properly close the client before reconnecting
     await this.closeClient();
 
-    // Emit connection lost event
-    this.emit('connection-lost', this.config.endpoint, new Error(reason));
+    // DO NOT emit connection-lost event here to avoid infinite loop
+    // The pool manager already knows about the failure and called this method
+    // Emitting another connection-lost event would trigger handleConnectionFailure again
 
     // Schedule reconnection
     this.scheduleReconnect();

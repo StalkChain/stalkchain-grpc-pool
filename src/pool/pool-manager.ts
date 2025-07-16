@@ -539,7 +539,7 @@ export class PoolManager extends EventEmitter<PoolEvents> implements IPool {
   }
 
   /**
-   * Schedule retry for a failed stream with endless retries for production use
+   * Schedule retry for a failed stream with intelligent backoff and rate limiting
    */
   private scheduleStreamRetry(endpoint: string, request: SubscribeRequest): void {
     if (!this.isStarted || !this.activeSubscriptionRequest) {
@@ -552,27 +552,43 @@ export class PoolManager extends EventEmitter<PoolEvents> implements IPool {
       clearTimeout(existingTimer);
     }
 
-    // Get current retry attempts (for logging and backoff calculation only)
+    // Get current retry attempts
     const currentAttempts = this.streamRetryAttempts.get(endpoint) || 0;
 
-    // Calculate exponential backoff delay with a maximum cap
-    // Start with 1s, then 2s, 4s, 8s, 16s, and cap at 30s
-    const baseDelay = 1000;
-    const maxDelay = 30000; // 30 seconds maximum delay
+    // Implement rate limiting for rapid failures
+    // If we've had many recent failures, increase the base delay significantly
+    const rapidFailureThreshold = 5;
+    const maxReasonableAttempts = 20; // After 20 attempts, use very long delays
 
-    // For RST_STREAM errors, use a slightly longer initial delay
+    let baseDelay = 1000; // Start with 1 second
+
+    // For rapid failures (first 5 attempts), use shorter delays but still reasonable
+    if (currentAttempts < rapidFailureThreshold) {
+      baseDelay = 2000; // 2 seconds minimum for rapid failures
+    } else if (currentAttempts < maxReasonableAttempts) {
+      baseDelay = 5000; // 5 seconds for moderate failures
+    } else {
+      baseDelay = 30000; // 30 seconds for persistent failures
+    }
+
+    const maxDelay = 300000; // 5 minutes maximum delay for persistent issues
+
+    // For RST_STREAM errors, use longer delays as they often indicate server-side issues
     const isRstStreamError = this.lastErrorWasRstStream(endpoint);
-    const adjustedBaseDelay = isRstStreamError ? baseDelay * 2 : baseDelay;
+    if (isRstStreamError) {
+      baseDelay = Math.max(baseDelay * 3, 10000); // At least 10 seconds for RST_STREAM
+    }
 
     // Calculate delay with exponential backoff, but cap at maxDelay
-    const delay = Math.min(adjustedBaseDelay * Math.pow(2, Math.min(currentAttempts, 10)), maxDelay);
+    const exponentialDelay = Math.min(baseDelay * Math.pow(1.5, Math.min(currentAttempts, 15)), maxDelay);
+    const delay = Math.max(exponentialDelay, baseDelay);
 
-    this.logger?.info(`Scheduling stream retry for ${endpoint} in ${delay}ms (attempt ${currentAttempts + 1}, endless retries enabled)`);
+    this.logger?.info(`Scheduling stream retry for ${endpoint} in ${delay}ms (attempt ${currentAttempts + 1})`);
 
     const timer = setTimeout(async () => {
       this.streamRetryTimers.delete(endpoint);
 
-      // Increment retry attempts (for tracking purposes only)
+      // Increment retry attempts
       this.streamRetryAttempts.set(endpoint, currentAttempts + 1);
 
       // Find the connection for this endpoint
@@ -582,7 +598,7 @@ export class PoolManager extends EventEmitter<PoolEvents> implements IPool {
         await this.startStreamForConnection(connection, request);
       } else {
         this.logger?.warn(`Connection ${endpoint} is not healthy, scheduling another retry`);
-        // Always schedule another retry, regardless of health status
+        // Schedule another retry with increased delay
         this.scheduleStreamRetry(endpoint, request);
       }
     }, delay);
