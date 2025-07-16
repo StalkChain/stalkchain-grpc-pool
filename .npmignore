@@ -1,0 +1,180 @@
+# Source files (only include compiled dist/)
+src/
+tsconfig.json
+tsconfig.build.json
+
+# Development and testing files
+test/
+tests/
+*.test.js
+*.test.ts
+*.spec.js
+*.spec.ts
+test-*.js
+examples/
+docs/
+
+# Build and development tools
+.eslintrc.js
+.eslintrc.json
+.eslintignore
+jest.config.js
+jest.config.json
+rollup.config.js
+webpack.config.js
+vite.config.js
+
+# Development dependencies and configs
+.nvmrc
+.node-version
+nodemon.json
+.babelrc
+.babelrc.js
+babel.config.js
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Version control
+.git/
+.gitignore
+.gitattributes
+.github/
+
+# CI/CD files
+.travis.yml
+.circleci/
+.github/
+appveyor.yml
+azure-pipelines.yml
+.gitlab-ci.yml
+Jenkinsfile
+
+# Documentation source files (keep README.md)
+docs/
+CONTRIBUTING.md
+CHANGELOG.md
+CODE_OF_CONDUCT.md
+SECURITY.md
+
+# Environment and local config files
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+.env.example
+.env.sample
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+.nyc_output/
+.coverage/
+
+# Dependency directories
+node_modules/
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# parcel-bundler cache (https://parceljs.org/)
+.cache
+.parcel-cache
+
+# next.js build output
+.next
+
+# nuxt.js build output
+.nuxt
+
+# vuepress build output
+.vuepress/dist
+
+# Serverless directories
+.serverless
+
+# FuseBox cache
+.fusebox/
+
+# DynamoDB Local files
+.dynamodb/
+
+# TernJS port file
+.tern-port
+
+# Stores VSCode versions used for testing VSCode extensions
+.vscode-test
+
+# Temporary folders
+tmp/
+temp/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Project specific test files
+test-pool.js
+test-retry.js
+test-error-handling.js
+test-original-issue.js
+
+# Development scripts and configs that shouldn't be published
+scripts/
+tools/
+.husky/
+.commitlintrc.js
+.commitlintrc.json
+.prettierrc
+.prettierrc.js
+.prettierrc.json
+.prettierignore
+
+# Lock files (let users choose their package manager)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Backup files
+*.bak
+*.backup
+*.old
+*.orig
+*.tmp

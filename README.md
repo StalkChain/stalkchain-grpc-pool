@@ -24,21 +24,20 @@ High-performance, production-ready gRPC connection pooling module with active-ac
 
 ## 📦 Installation
 
-### Option 1: Package Manager (When Published)
+### Option 1: Package Manager (Recommended)
 
 ```bash
-# Note: This will work once the package is published to npm
-# Using pnpm (recommended)
-pnpm add @stalkchain/grpc-pool
-
 # Using npm
 npm install @stalkchain/grpc-pool
+
+# Using pnpm
+pnpm add @stalkchain/grpc-pool
 
 # Using yarn
 yarn add @stalkchain/grpc-pool
 ```
 
-### Option 2: Direct Repository Setup (Recommended)
+### Option 2: Direct Repository Setup
 
 If you've downloaded or cloned this repository directly:
 
@@ -95,18 +94,11 @@ SOLANA_TRACKER_GRPC_KEY=your_api_key_here
 ### 2. Basic Usage
 
 ```typescript
-// If installed via package manager
+// ES6 imports (TypeScript/modern Node.js)
 import { createSolanaGrpcPool, registerPoolForGracefulShutdown } from '@stalkchain/grpc-pool';
 
-// If using local repository
-import { createSolanaGrpcPool, registerPoolForGracefulShutdown } from './path/to/stalkchain-grpc-pool/dist';
-// or
-const { createSolanaGrpcPool, registerPoolForGracefulShutdown } = require('./path/to/stalkchain-grpc-pool/dist');
-// or 
-import { createSolanaGrpcPool, registerPoolForGracefulShutdown } from '@stalkchain/grpc-pool'; // in case added in package.json with: 
-// "dependencies": {
-//   "@stalkchain/grpc-pool": "file:modules/stalkchain-grpc-pool-main"
-// }
+// CommonJS (traditional Node.js)
+const { createSolanaGrpcPool, registerPoolForGracefulShutdown } = require('@stalkchain/grpc-pool');
 
 // Create pool with multiple endpoints
 const pool = createSolanaGrpcPool([
