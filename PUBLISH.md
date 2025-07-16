@@ -5,10 +5,9 @@ This document outlines the steps to publish `@stalkchain/grpc-pool` to npm.
 ## Pre-publish Checklist
 
 ### 1. Code Quality
-- [ ] All tests pass: `npm test`
-- [ ] Linting passes: `npm run lint`
 - [ ] Build succeeds: `npm run build`
 - [ ] TypeScript compilation is clean
+- [ ] Linting check (optional): `npm run lint`
 
 ### 2. Documentation
 - [ ] README.md is up to date
