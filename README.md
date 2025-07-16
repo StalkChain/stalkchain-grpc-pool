@@ -14,8 +14,8 @@ High-performance, production-ready gRPC connection pooling module with active-ac
 - **Endless Retries**: Never gives up reconnecting for maximum production uptime
 - **Message Timeout Detection**: Identifies stale connections when no messages are received
 - **Stream Ping/Pong Keep-Alive**: Active monitoring of stream health with ping/pong messages
-- **Proper Connection Cleanup**: Always closes connections before reconnecting to prevent leaks
-- **Graceful Shutdown**: Properly closes all streams when the process exits
+- **Comprehensive Connection Closure**: Three-step stream closure (cancel → end → destroy) prevents resource leaks
+- **Graceful Shutdown**: Properly closes all streams and connections when the process exits
 - **Circuit Breaker Pattern**: Prevents cascade failures
 - **Health Monitoring**: Real-time connection health tracking
 - **High Performance**: 3,000+ messages/second throughput
@@ -214,6 +214,9 @@ pnpm run test:stream-ping
 # Test connection cleanup
 pnpm run test:connection-cleanup
 
+# Test comprehensive connection closure (stale detection, graceful shutdown, reconnection)
+pnpm run test:connection-closure
+
 # Test noPing option
 pnpm run test:no-ping
 
@@ -256,6 +259,7 @@ The tests will:
 - **`test/test-message-timeout.js`**: Tests stale connection detection via message timeout
 - **`test/test-stream-ping.js`**: Tests stream ping/pong keep-alive functionality
 - **`test/test-connection-cleanup.js`**: Tests proper gRPC connection cleanup
+- **`test/test-connection-closure.js`**: Tests comprehensive connection closure (stale detection, graceful shutdown, reconnection)
 - **`test/test-no-ping-option.js`**: Tests noPing option for public endpoints
 - **`test/test-stale-reconnection.js`**: Tests reconnection behavior for stale connections
 - **`test/test-public-grpc-health.js`**: Tests health checks with public gRPC endpoints
@@ -410,6 +414,49 @@ interface StreamPingConfig {
 - Higher values = more tolerant of temporary network issues
 - Lower values = faster detection of connection problems
 - **Recommendation**: 2-5 for most use cases
+
+### Connection Closure and Resource Management
+
+The pool implements comprehensive connection closure to prevent resource leaks and ensure proper cleanup, especially critical for paid gRPC services with connection limits.
+
+#### Three-Step Stream Closure Process
+
+When streams need to be closed (stale detection, graceful shutdown, or reconnection), the pool follows the Yellowstone gRPC documentation's recommended sequence:
+
+```javascript
+// 1. Cancel the stream
+stream.cancel();
+
+// 2. End the stream gracefully
+stream.end();
+
+// 3. Destroy the stream immediately
+stream.destroy();
+```
+
+#### Connection Closure Scenarios
+
+**1. Stale Connection Detection**
+- Triggered by `messageTimeout` or `streamPing` failures
+- Streams are cancelled using the three-step process before reconnection
+- Prevents accumulation of dead connections
+
+**2. Graceful Shutdown**
+- All active streams are properly cancelled during `pool.stop()`
+- Ensures clean process termination without resource leaks
+- Recommended to use `registerPoolForGracefulShutdown(pool)`
+
+**3. Reconnection Attempts**
+- Existing streams are cancelled before establishing new connections
+- Prevents multiple streams per endpoint and connection limit issues
+- Critical for paid services with concurrent connection limits
+
+#### Resource Management Benefits
+
+- ✅ **Prevents Connection Leaks**: Proper stream closure releases server-side resources
+- ✅ **Avoids Connection Limits**: Critical for paid gRPC services with concurrent limits
+- ✅ **Ensures Clean Shutdown**: Graceful process termination without hanging connections
+- ✅ **Optimizes Performance**: Prevents resource accumulation and degradation
 
 ### Connection Options
 

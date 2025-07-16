@@ -245,7 +245,8 @@ export class ConnectionManager extends EventEmitter<PoolEvents> {
       
       this.emit('connection-lost', this.config.endpoint, error as Error);
 
-      // Always attempt to reconnect for production reliability
+      // For initial connection failures, schedule reconnect directly since there are no active streams to cancel
+      // For established connections that fail health checks, the pool manager handles reconnection after stream cleanup
       this.scheduleReconnect();
     }
   }
@@ -349,12 +350,13 @@ export class ConnectionManager extends EventEmitter<PoolEvents> {
       if (this.consecutiveFailures >= 3) {
         this.logger?.error(`Connection to ${this.config.endpoint} appears to be stale`);
         this.state = ConnectionState.FAILED;
-        this.emit('connection-lost', this.config.endpoint, error as Error);
 
-        // Properly close the client before reconnecting
+        // Properly close the client before emitting the event
         await this.closeClient();
 
-        this.scheduleReconnect();
+        // Emit connection-lost event to let the pool manager handle proper stream cancellation and reconnection
+        // The pool manager will call forceReconnect() which will handle the reconnection scheduling
+        this.emit('connection-lost', this.config.endpoint, error as Error);
       } else {
         // Even with fewer failures, log a warning but don't mark as failed yet
         this.logger?.warn(`Health check failed (${this.consecutiveFailures}/3) for ${this.config.endpoint}`);
@@ -396,15 +398,25 @@ export class ConnectionManager extends EventEmitter<PoolEvents> {
     this.logger?.debug(`Closing gRPC client for ${this.config.endpoint}`);
 
     try {
-      // The yellowstone-grpc client doesn't have a direct close method
-      // But we need to ensure any active streams are properly cancelled
-      // The client will be garbage collected, but we should null it immediately
+      // The ConnectionManager is responsible for closing the gRPC client connection
+      // Stream closure (using stream.cancel(), stream.end(), stream.destroy())
+      // is handled by the PoolManager which manages the streams
+
+      // For the Yellowstone gRPC client, we need to ensure proper cleanup
+      // The client connection will be closed when we null the reference
+      // and any active streams should be cancelled by the PoolManager before this method is called
+
+      this.logger?.debug(`Closing gRPC client connection for ${this.config.endpoint}`);
+
+      // Null the client reference to release the connection
+      // The PoolManager should have already cancelled all streams using:
+      // stream.cancel(), stream.end(), and stream.destroy()
       this.client = null;
 
-      this.logger?.debug(`gRPC client closed for ${this.config.endpoint}`);
+      this.logger?.debug(`gRPC client connection closed for ${this.config.endpoint}`);
     } catch (error) {
       this.logger?.warn(`Error closing gRPC client for ${this.config.endpoint}: ${error}`);
-      // Still null the client even if there was an error
+      // Still null the client even if there was an error to prevent resource leaks
       this.client = null;
     }
   }

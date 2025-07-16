@@ -102,67 +102,23 @@ export class PoolManager extends EventEmitter<PoolEvents> implements IPool {
     }
     this.streamRetryTimers.clear();
 
-    // Cancel all active streams properly
-    const streamCancelPromises: Promise<void>[] = [];
-    for (const [endpoint, stream] of this.activeStreams.entries()) {
-      try {
-        this.logger?.debug(`Cancelling stream for ${endpoint}`);
+    // Cancel all active streams properly using the centralized method
+    const activeEndpoints = Array.from(this.activeStreams.keys());
+    if (activeEndpoints.length > 0) {
+      this.logger?.info(`Cancelling ${activeEndpoints.length} active streams for graceful shutdown...`);
 
-        // Create a promise that resolves when the stream is properly closed
-        const cancelPromise = new Promise<void>((resolve) => {
-          // Set up error handler for the cancellation event
-          const originalErrorHandler = stream.listeners('error')[0];
-          if (originalErrorHandler) {
-            stream.removeListener('error', originalErrorHandler);
-          }
+      const streamCancelPromises = activeEndpoints.map(endpoint =>
+        this.cancelStreamForEndpoint(endpoint, 'Graceful shutdown')
+      );
 
-          // Add our own error handler that detects cancellation
-          stream.on('error', (err: any) => {
-            if (err.code === 1 || (err.message && err.message.includes('Cancelled'))) {
-              this.logger?.debug(`Stream for ${endpoint} cancelled successfully`);
-              resolve();
-            } else {
-              this.logger?.warn(`Error during stream cancellation for ${endpoint}: ${err}`);
-              resolve(); // Still resolve to avoid hanging
-            }
-          });
-
-          // Add close handler
-          stream.on('close', () => {
-            this.logger?.debug(`Stream for ${endpoint} closed`);
-            resolve();
-          });
-
-          // Cancel the stream
-          try {
-            stream.cancel();
-          } catch (cancelError) {
-            this.logger?.warn(`Error calling stream.cancel() for ${endpoint}: ${cancelError}`);
-            resolve(); // Still resolve to avoid hanging
-          }
-
-          // Add timeout to prevent hanging
-          setTimeout(() => {
-            this.logger?.warn(`Stream cancellation timeout for ${endpoint}, forcing cleanup`);
-            resolve();
-          }, 3000);
-        });
-
-        streamCancelPromises.push(cancelPromise);
-      } catch (error) {
-        this.logger?.warn(`Error cancelling stream for ${endpoint}: ${error}`);
-      }
-    }
-
-    // Wait for all streams to be properly cancelled with a timeout
-    if (streamCancelPromises.length > 0) {
-      this.logger?.info(`Waiting for ${streamCancelPromises.length} streams to close...`);
+      // Wait for all streams to be properly cancelled with a timeout
       await Promise.race([
         Promise.all(streamCancelPromises),
-        new Promise(resolve => setTimeout(resolve, 5000)) // 5 second timeout
+        new Promise(resolve => setTimeout(resolve, 8000)) // 8 second timeout (longer for shutdown)
       ]);
     }
 
+    // Clear any remaining tracking data
     this.streamProcessors.clear();
     this.activeStreams.clear();
     this.streamRetryAttempts.clear();
@@ -781,6 +737,90 @@ export class PoolManager extends EventEmitter<PoolEvents> implements IPool {
   }
 
   /**
+   * Cancel stream for a specific endpoint with proper cleanup
+   * This is critical for preventing resource leaks when reconnecting
+   */
+  private async cancelStreamForEndpoint(endpoint: string, reason: string): Promise<void> {
+    const stream = this.activeStreams.get(endpoint);
+    if (!stream) {
+      this.logger?.debug(`No active stream found for ${endpoint}`);
+      return;
+    }
+
+    this.logger?.info(`Cancelling stream for ${endpoint}: ${reason}`);
+
+    try {
+      // Create a promise that resolves when the stream is properly closed
+      const cancelPromise = new Promise<void>((resolve) => {
+        // Set up error handler for the cancellation event
+        const originalErrorHandler = stream.listeners('error')[0];
+        if (originalErrorHandler) {
+          stream.removeListener('error', originalErrorHandler);
+        }
+
+        // Add our own error handler that detects cancellation
+        stream.on('error', (err: any) => {
+          if (err.code === 1 || (err.message && err.message.includes('Cancelled'))) {
+            this.logger?.debug(`Stream for ${endpoint} cancelled successfully`);
+            resolve();
+          } else {
+            this.logger?.warn(`Error during stream cancellation for ${endpoint}: ${err}`);
+            resolve(); // Still resolve to avoid hanging
+          }
+        });
+
+        // Add close handler
+        stream.on('close', () => {
+          this.logger?.debug(`Stream for ${endpoint} closed`);
+          resolve();
+        });
+
+        // Close the stream using the proper sequence as per Yellowstone gRPC documentation:
+        // 1. stream.cancel() - cancels the stream
+        // 2. stream.end() - ends the stream gracefully
+        // 3. stream.destroy() - destroys the stream immediately
+        try {
+          this.logger?.debug(`Step 1: Calling stream.cancel() for ${endpoint}`);
+          stream.cancel();
+
+          this.logger?.debug(`Step 2: Calling stream.end() for ${endpoint}`);
+          stream.end();
+
+          this.logger?.debug(`Step 3: Calling stream.destroy() for ${endpoint}`);
+          stream.destroy();
+        } catch (streamCloseError) {
+          this.logger?.warn(`Error during stream closure sequence for ${endpoint}: ${streamCloseError}`);
+          resolve(); // Still resolve to avoid hanging
+        }
+
+        // Add timeout to prevent hanging
+        setTimeout(() => {
+          this.logger?.warn(`Stream cancellation timeout for ${endpoint}, forcing cleanup`);
+          resolve();
+        }, 3000);
+      });
+
+      // Wait for the stream to be properly cancelled
+      await cancelPromise;
+
+      // Clean up tracking data
+      this.activeStreams.delete(endpoint);
+      this.streamProcessors.delete(endpoint);
+      this.stopStreamPing(endpoint);
+
+      this.logger?.info(`Stream for ${endpoint} cancelled and cleaned up successfully`);
+
+    } catch (error) {
+      this.logger?.error(`Error cancelling stream for ${endpoint}: ${error}`);
+
+      // Force cleanup even if cancellation failed
+      this.activeStreams.delete(endpoint);
+      this.streamProcessors.delete(endpoint);
+      this.stopStreamPing(endpoint);
+    }
+  }
+
+  /**
    * Send a ping message to the stream
    */
   private sendStreamPing(endpoint: string, stream: any): void {
@@ -913,7 +953,10 @@ export class PoolManager extends EventEmitter<PoolEvents> implements IPool {
   private async handleConnectionFailure(failedEndpoint: string): Promise<void> {
     this.logger?.warn(`Handling connection failure for ${failedEndpoint}`);
 
-    // First, force the failed connection to reconnect
+    // First, cancel any active streams for this endpoint before reconnecting
+    await this.cancelStreamForEndpoint(failedEndpoint, 'Connection failure detected');
+
+    // Then, force the failed connection to reconnect
     const failedConnection = this.connections.get(failedEndpoint);
     if (failedConnection) {
       this.logger?.info(`Forcing reconnection for stale connection: ${failedEndpoint}`);

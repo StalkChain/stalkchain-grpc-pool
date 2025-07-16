@@ -337,26 +337,18 @@ export class HealthMonitor extends EventEmitter<PoolEvents> {
 
   /**
    * Handle stale connection detection
+   * Instead of directly managing the connection, emit a connection-lost event
+   * to let the pool manager handle proper stream cancellation and reconnection
    */
-  private async handleStaleConnection(endpoint: string, connection: ConnectionManager): Promise<void> {
+  private async handleStaleConnection(endpoint: string, _connection: ConnectionManager): Promise<void> {
     this.logger?.warn(`Handling stale connection for ${endpoint}`);
-    
-    try {
-      // Stop the connection
-      await connection.stop();
-      
-      // Wait a bit before restarting
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Restart the connection
-      await connection.start();
-      
-      this.logger?.info(`Restarted stale connection for ${endpoint}`);
-      
-    } catch (error) {
-      this.logger?.error(`Failed to restart stale connection for ${endpoint}: ${error}`);
-      this.emit('error', error as Error, `stale-connection-restart-${endpoint}`);
-    }
+
+    // Emit connection-lost event to trigger proper pool manager handling
+    // This ensures streams are properly cancelled before reconnection
+    const staleError = new Error(`Stale connection detected by health monitor`);
+    this.emit('connection-lost', endpoint, staleError);
+
+    this.logger?.info(`Emitted connection-lost event for stale connection: ${endpoint}`);
   }
 
   /**

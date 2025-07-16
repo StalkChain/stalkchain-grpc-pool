@@ -21,6 +21,7 @@
     "test:public-grpc": "node test/test-public-grpc-health.js",
     "test:stale-reconnection": "pnpm run build && node test/test-stale-reconnection.js",
     "test:connection-cleanup": "pnpm run build && node test/test-connection-cleanup.js",
+    "test:connection-closure": "pnpm run build && node test/test-connection-closure.js",
     "test:no-ping": "pnpm run build && node test/test-no-ping-option.js",
     "example:solana": "pnpm run build && node -r ts-node/register examples/solana-tracker-example.ts",
     "example:graceful-shutdown": "pnpm run build && node -r ts-node/register examples/graceful-shutdown-example.ts",
