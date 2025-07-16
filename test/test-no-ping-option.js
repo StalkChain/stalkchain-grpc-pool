@@ -227,7 +227,7 @@ async function testNoPingOption() {
     console.log('const connections = [');
     console.log('  {');
     console.log('    endpoint: "https://grpc.solanatracker.io",');
-    console.log('    token: process.env.SOLANA_TRACKER_API_KEY');
+    console.log('    token: process.env.SOLANA_TRACKER_GRPC_KEY');
     console.log('    // Regular connection - will do ping health checks');
     console.log('  },');
     console.log('  {');

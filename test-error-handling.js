@@ -5,8 +5,8 @@ async function testErrorHandling() {
   console.log('🚀 Testing gRPC Pool Error Handling and Retry Behavior...');
 
   // Check if API key is available
-  if (!process.env.SOLANA_TRACKER_API_KEY) {
-    console.error('❌ SOLANA_TRACKER_API_KEY not found in environment variables');
+  if (!process.env.SOLANA_TRACKER_GRPC_KEY) {
+    console.error('❌ SOLANA_TRACKER_GRPC_KEY not found in environment variables');
     process.exit(1);
   }
 
@@ -14,11 +14,11 @@ async function testErrorHandling() {
   const connections = [
     {
       endpoint: 'https://grpc.solanatracker.io',
-      token: process.env.SOLANA_TRACKER_API_KEY
+      token: process.env.SOLANA_TRACKER_GRPC_KEY
     },
     {
       endpoint: 'https://grpc-us.solanatracker.io',
-      token: process.env.SOLANA_TRACKER_API_KEY
+      token: process.env.SOLANA_TRACKER_GRPC_KEY
     },
     {
       endpoint: 'https://invalid-grpc-endpoint.example.com',

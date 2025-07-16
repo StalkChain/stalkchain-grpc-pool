@@ -12,7 +12,7 @@ import { createSolanaGrpcPool, createDefaultLogger, LogLevel } from '@stalkchain
 // Environment configuration
 const config = {
   port: process.env.PORT || 3000,
-  solanaTrackerApiKey: process.env.SOLANA_TRACKER_API_KEY || 'your_key_here',
+  solanaTrackerApiKey: process.env.SOLANA_TRACKER_GRPC_KEY || 'your_key_here',
   logLevel: process.env.LOG_LEVEL || 'INFO'
 };
 

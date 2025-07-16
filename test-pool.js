@@ -5,9 +5,9 @@ async function testPool() {
   console.log('🚀 Starting gRPC Pool Test with SolanaTracker endpoints...');
 
   // Check if API key is available
-  if (!process.env.SOLANA_TRACKER_API_KEY) {
-    console.error('❌ SOLANA_TRACKER_API_KEY not found in environment variables');
-    console.error('   Please create a .env file with: SOLANA_TRACKER_API_KEY=your_api_key_here');
+  if (!process.env.SOLANA_TRACKER_GRPC_KEY) {
+    console.error('❌ SOLANA_TRACKER_GRPC_KEY not found in environment variables');
+    console.error('   Please create a .env file with: SOLANA_TRACKER_GRPC_KEY=your_api_key_here');
     process.exit(1);
   }
 
@@ -15,11 +15,11 @@ async function testPool() {
   const connections = [
     {
       endpoint: 'https://grpc.solanatracker.io',
-      token: process.env.SOLANA_TRACKER_API_KEY
+      token: process.env.SOLANA_TRACKER_GRPC_KEY
     },
     {
       endpoint: 'https://grpc-us.solanatracker.io',
-      token: process.env.SOLANA_TRACKER_API_KEY
+      token: process.env.SOLANA_TRACKER_GRPC_KEY
     },
     {
       endpoint: 'https://solana-yellowstone-grpc.publicnode.com:443',

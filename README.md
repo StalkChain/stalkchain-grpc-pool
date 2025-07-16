@@ -89,7 +89,7 @@ cp .env.example .env
 Add your SolanaTracker API key:
 
 ```env
-SOLANA_TRACKER_API_KEY=your_api_key_here
+SOLANA_TRACKER_GRPC_KEY=your_api_key_here
 ```
 
 ### 2. Basic Usage
@@ -112,11 +112,11 @@ import { createSolanaGrpcPool, registerPoolForGracefulShutdown } from '@stalkcha
 const pool = createSolanaGrpcPool([
   {
     endpoint: 'https://grpc.solanatracker.io',
-    token: process.env.SOLANA_TRACKER_API_KEY!
+    token: process.env.SOLANA_TRACKER_GRPC_KEY!
   },
   {
     endpoint: 'https://grpc-us.solanatracker.io',
-    token: process.env.SOLANA_TRACKER_API_KEY!
+    token: process.env.SOLANA_TRACKER_GRPC_KEY!
   },
   {
     endpoint: 'https://solana-yellowstone-grpc.publicnode.com',
@@ -504,7 +504,7 @@ The `noPing` option allows you to skip ping health checks for specific connectio
 const connections = [
   {
     endpoint: 'https://grpc.solanatracker.io',
-    token: process.env.SOLANA_TRACKER_API_KEY
+    token: process.env.SOLANA_TRACKER_GRPC_KEY
     // Regular connection - will perform ping health checks
   },
   {
@@ -603,11 +603,11 @@ const pool = createSolanaGrpcPool([
   // Primary paid endpoints with full health monitoring
   {
     endpoint: 'https://grpc.solanatracker.io',
-    token: process.env.SOLANA_TRACKER_API_KEY
+    token: process.env.SOLANA_TRACKER_GRPC_KEY
   },
   {
     endpoint: 'https://grpc-us.solanatracker.io',
-    token: process.env.SOLANA_TRACKER_API_KEY
+    token: process.env.SOLANA_TRACKER_GRPC_KEY
   },
 
   // Public fallback endpoints with ping disabled
