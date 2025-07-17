@@ -37,9 +37,9 @@ pnpm add @stalkchain/grpc-pool
 yarn add @stalkchain/grpc-pool
 ```
 
-### Option 2: Direct Repository Setup
+### Option 2: Development Setup
 
-If you've downloaded or cloned this repository directly:
+For development or contributing to this package:
 
 ```bash
 # Clone the repository
@@ -47,32 +47,45 @@ git clone https://github.com/StalkChain/stalkchain-grpc-pool.git
 cd stalkchain-grpc-pool
 
 # Install dependencies
-pnpm install
+npm install
 
 # Build the project
-pnpm build
+npm run build
 ```
 
-Then in your project, reference it as a local module in your package.json:
+## 🎯 Quick Example
 
-```json
-{
-  "name": "your-stalkchain-app",
-  "dependencies": {
-    "@stalkchain/grpc-pool": "file:../modules/stalkchain-grpc-pool",
-    "other-dependencies": "..."
-  }
-}
+Want to see it in action? Run the included example:
+
+```bash
+# Install the package
+npm install @stalkchain/grpc-pool
+
+# The example.js file is included in the package
+# Copy it to your project directory
+cp node_modules/@stalkchain/grpc-pool/example.js .
+
+# Run the example (uses free public endpoint + your API tokens if available)
+node example.js
 ```
 
-Or use it directly with require/import:
+**Alternative**: Download directly from GitHub:
+```bash
+curl -O https://raw.githubusercontent.com/StalkChain/stalkchain-grpc-pool/main/example.js
+node example.js
+```
 
-```javascript
-// If using the built version
-const { createSolanaGrpcPool } = require('./path/to/stalkchain-grpc-pool/dist');
+The example will:
+- ✅ Connect to 3 gRPC endpoints (2 paid + 1 free public)
+- ✅ Subscribe to SPL Token and Token-2022 transactions
+- ✅ Show real-time transaction data with deduplication
+- ✅ Display connection health and failover events
+- ✅ Handle graceful shutdown with Ctrl+C
 
-// Or if using TypeScript directly
-import { createSolanaGrpcPool } from './path/to/stalkchain-grpc-pool/src';
+**Optional**: Set environment variables for paid endpoints:
+```bash
+export SOLANA_TRACKER_TOKEN="your-api-token"
+node example.js
 ```
 
 ## 🔧 Quick Start
@@ -172,89 +185,7 @@ await pool.subscribe({
 });
 ```
 
-## 🧪 Testing
 
-### For Local Repository Setup
-
-Run the included tests to verify everything works:
-
-```bash
-# First, make sure you have built the project
-pnpm build
-
-# Run the basic pool test
-pnpm run test:pool
-
-# Test error handling and retry behavior
-pnpm run test:retry
-
-# Test original issue fix (401 error handling)
-pnpm run test:original-issue
-
-# Test endless retries functionality
-pnpm run test:endless-retries
-
-# Test graceful shutdown
-pnpm run test:graceful-shutdown
-
-# Test message timeout detection
-pnpm run test:message-timeout
-
-# Test stream ping/pong keep-alive
-pnpm run test:stream-ping
-
-# Test connection cleanup
-pnpm run test:connection-cleanup
-
-# Test comprehensive connection closure (stale detection, graceful shutdown, reconnection)
-pnpm run test:connection-closure
-
-# Test noPing option
-pnpm run test:no-ping
-
-# Test stale connection reconnection
-pnpm run test:stale-reconnection
-
-# Test public gRPC health (no build required)
-pnpm run test:public-grpc
-
-# Test comprehensive error handling
-pnpm run test:error-handling
-```
-
-### For Package Installation
-
-```bash
-# Build and test
-pnpm run test:pool
-```
-
-The tests will:
-- Connect to all configured endpoints
-- Show real-time transaction signatures
-- Display deduplication statistics
-- Monitor connection health
-- Test error handling and automatic retry behavior
-- Verify the pool continues working even when individual connections fail
-
-### Test Files Description
-
-#### Root Level Tests
-- **`test-pool.js`**: Basic functionality test with all endpoints
-- **`test-retry.js`**: Tests retry behavior when connections fail
-- **`test-original-issue.js`**: Verifies the fix for 401 authentication errors
-- **`test-error-handling.js`**: Comprehensive error handling validation
-
-#### Feature-Specific Tests
-- **`test/test-endless-retries.js`**: Tests endless retry functionality for production reliability
-- **`test/test-graceful-shutdown.js`**: Tests proper connection cleanup on shutdown
-- **`test/test-message-timeout.js`**: Tests stale connection detection via message timeout
-- **`test/test-stream-ping.js`**: Tests stream ping/pong keep-alive functionality
-- **`test/test-connection-cleanup.js`**: Tests proper gRPC connection cleanup
-- **`test/test-connection-closure.js`**: Tests comprehensive connection closure (stale detection, graceful shutdown, reconnection)
-- **`test/test-no-ping-option.js`**: Tests noPing option for public endpoints
-- **`test/test-stale-reconnection.js`**: Tests reconnection behavior for stale connections
-- **`test/test-public-grpc-health.js`**: Tests health checks with public gRPC endpoints
 
 ## 📊 Performance
 
@@ -411,19 +342,20 @@ interface StreamPingConfig {
 
 The pool implements comprehensive connection closure to prevent resource leaks and ensure proper cleanup, especially critical for paid gRPC services with connection limits.
 
-#### Three-Step Stream Closure Process
+#### Three-Step Closure Process
 
-When streams need to be closed (stale detection, graceful shutdown, or reconnection), the pool follows the Yellowstone gRPC documentation's recommended sequence:
+When connections need to be closed (stale detection, graceful shutdown, or reconnection), the pool applies the same three-step process to both streams and gRPC client connections:
 
 ```javascript
-// 1. Cancel the stream
-stream.cancel();
+// For streams:
+stream.cancel();  // 1. Cancel the stream
+stream.end();     // 2. End the stream gracefully
+stream.destroy(); // 3. Destroy the stream immediately
 
-// 2. End the stream gracefully
-stream.end();
-
-// 3. Destroy the stream immediately
-stream.destroy();
+// For gRPC client connections (same process):
+client.cancel();  // 1. Cancel the client connection
+client.end();     // 2. End the client connection gracefully
+client.destroy(); // 3. Destroy the client connection immediately
 ```
 
 #### Connection Closure Scenarios
@@ -807,24 +739,19 @@ If you're developing with the local repository:
 
 2. Install dependencies:
    ```bash
-   pnpm install
+   npm install
    ```
 
 3. Build the project:
    ```bash
-   pnpm build
+   npm run build
    ```
 
-4. Run tests:
-   ```bash
-   node test-pool.js
-   ```
+4. Make your changes to the TypeScript source in the `src` directory
 
-5. Make your changes to the TypeScript source in the `src` directory
-
-6. Rebuild after changes:
+5. Rebuild after changes:
    ```bash
-   pnpm build
+   npm run build
    ```
 
 ### Using in Another Project During Development
@@ -833,12 +760,12 @@ You can link your local copy to another project:
 
 1. In the stalkchain-grpc-pool directory:
    ```bash
-   pnpm link --global
+   npm link
    ```
 
 2. In your project directory:
    ```bash
-   pnpm link --global @stalkchain/grpc-pool
+   npm link @stalkchain/grpc-pool
    ```
 
 Or reference it directly in your package.json:
@@ -851,14 +778,7 @@ Or reference it directly in your package.json:
 }
 ```
 
-## 📚 Documentation
 
-- [Endless Retries Guide](docs/ENDLESS_RETRIES.md) - Production reliability features
-- [Message Timeout Detection](docs/MESSAGE_TIMEOUT.md) - Detecting stale connections
-- [Stream Ping/Pong Keep-Alive](docs/STREAM_PING_PONG.md) - Active stream health monitoring
-- [Connection Cleanup Guide](docs/CONNECTION_CLEANUP.md) - Proper resource management and leak prevention
-- [Graceful Shutdown Guide](docs/GRACEFUL_SHUTDOWN.md) - Properly closing gRPC connections
-- [Examples](examples/) - Usage examples and patterns
 
 ## 🤝 Contributing
 

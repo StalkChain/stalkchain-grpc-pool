@@ -1,6 +1,6 @@
 {
   "name": "@stalkchain/grpc-pool",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "High-availability gRPC connection pooling module with active-active configuration, deduplication, and stale connection detection",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -32,7 +32,8 @@
   "files": [
     "dist/**/*",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "example.js"
   ],
   "engines": {
     "node": ">=18.0.0"

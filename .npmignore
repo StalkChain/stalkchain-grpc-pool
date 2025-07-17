@@ -14,6 +14,12 @@ test-*.js
 examples/
 docs/
 
+# Root level test files
+test-pool.js
+test-retry.js
+test-error-handling.js
+test-original-issue.js
+
 # Build and development tools
 .eslintrc.js
 .eslintrc.json

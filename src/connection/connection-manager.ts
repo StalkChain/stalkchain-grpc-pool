@@ -387,8 +387,8 @@ export class ConnectionManager extends EventEmitter<PoolEvents> {
   }
 
   /**
-   * Properly close the gRPC client connection
-   * This is critical for paid servers with connection limits
+   * Properly close the gRPC client connection using the three-step process
+   * This is critical for paid servers with connection limits to prevent connection accumulation
    */
   private async closeClient(): Promise<void> {
     if (!this.client) {
@@ -402,20 +402,36 @@ export class ConnectionManager extends EventEmitter<PoolEvents> {
       // Stream closure (using stream.cancel(), stream.end(), stream.destroy())
       // is handled by the PoolManager which manages the streams
 
-      // For the Yellowstone gRPC client, we need to ensure proper cleanup
-      // The client connection will be closed when we null the reference
-      // and any active streams should be cancelled by the PoolManager before this method is called
+      // The Yellowstone gRPC client is essentially a stream, so we use the same
+      // three-step closure process as we do for streams in the PoolManager:
+      // 1. client.cancel() - cancels the client connection
+      // 2. client.end() - ends the client connection gracefully
+      // 3. client.destroy() - destroys the client connection immediately
 
-      this.logger?.debug(`Closing gRPC client connection for ${this.config.endpoint}`);
+      // Use type assertion to access the stream methods on the client
+      const clientAsStream = this.client as any;
 
-      // Null the client reference to release the connection
-      // The PoolManager should have already cancelled all streams using:
-      // stream.cancel(), stream.end(), and stream.destroy()
+      this.logger?.debug(`Step 1: Calling client.cancel() for ${this.config.endpoint}`);
+      if (typeof clientAsStream.cancel === 'function') {
+        clientAsStream.cancel();
+      }
+
+      this.logger?.debug(`Step 2: Calling client.end() for ${this.config.endpoint}`);
+      if (typeof clientAsStream.end === 'function') {
+        clientAsStream.end();
+      }
+
+      this.logger?.debug(`Step 3: Calling client.destroy() for ${this.config.endpoint}`);
+      if (typeof clientAsStream.destroy === 'function') {
+        clientAsStream.destroy();
+      }
+
+      // Always null the client reference after attempting to close
       this.client = null;
 
-      this.logger?.debug(`gRPC client connection closed for ${this.config.endpoint}`);
+      this.logger?.debug(`gRPC client connection closed using three-step process for ${this.config.endpoint}`);
     } catch (error) {
-      this.logger?.warn(`Error closing gRPC client for ${this.config.endpoint}: ${error}`);
+      this.logger?.warn(`Error during three-step client closure for ${this.config.endpoint}: ${error}`);
       // Still null the client even if there was an error to prevent resource leaks
       this.client = null;
     }
