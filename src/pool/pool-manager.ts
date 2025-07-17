@@ -269,6 +269,12 @@ export class PoolManager extends EventEmitter<PoolEvents> implements IPool {
         throw new Error(`No circuit breaker found for ${endpoint}`);
       }
 
+      // Check if a stream already exists and close it before creating a new one
+      if (this.activeStreams.has(endpoint)) {
+        this.logger?.info(`Existing stream found for ${endpoint}, closing it before creating new stream`);
+        await this.cancelStreamForEndpoint(endpoint, 'Replacing with new stream');
+      }
+
       // Execute subscription through circuit breaker
       const stream = await circuitBreaker.execute(async () => {
         const grpcStream = await client.subscribe();
