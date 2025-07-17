@@ -122,7 +122,7 @@ export class ConnectionManager extends EventEmitter<PoolEvents> {
     this.stopHealthChecks();
     this.stopReconnectTimer();
 
-    // Simple client cleanup - just null the reference like the working example
+    // Properly close the gRPC client connection
     this.nullifyClient();
 
     this.state = ConnectionState.DISCONNECTED;
@@ -157,7 +157,7 @@ export class ConnectionManager extends EventEmitter<PoolEvents> {
     this.state = ConnectionState.FAILED;
     this.consecutiveFailures = 3; // Set to threshold to trigger reconnection logic
 
-    // Simple client cleanup - just null the reference like the working example
+    // Properly close the gRPC client connection
     this.nullifyClient();
 
     // DO NOT emit connection-lost event here to avoid infinite loop
@@ -211,7 +211,7 @@ export class ConnectionManager extends EventEmitter<PoolEvents> {
 
     this.state = ConnectionState.CONNECTING;
 
-    // Clean up any existing client before creating new one, like the working example
+    // Clean up any existing client before creating new one
     this.nullifyClient();
 
     try {
@@ -246,7 +246,7 @@ export class ConnectionManager extends EventEmitter<PoolEvents> {
       this.state = ConnectionState.FAILED;
       this.consecutiveFailures++;
 
-      // Immediately null the client on failure like the working example
+      // Immediately close and null the client on failure
       this.nullifyClient();
 
       this.emit('connection-lost', this.config.endpoint, error as Error);
@@ -357,7 +357,7 @@ export class ConnectionManager extends EventEmitter<PoolEvents> {
         this.logger?.error(`Connection to ${this.config.endpoint} appears to be stale`);
         this.state = ConnectionState.FAILED;
 
-        // Simple client cleanup - just null the reference like the working example
+        // Properly close the gRPC client connection
         this.nullifyClient();
 
         // Emit connection-lost event to let the pool manager handle proper stream cancellation and reconnection
@@ -393,12 +393,23 @@ export class ConnectionManager extends EventEmitter<PoolEvents> {
   }
 
   /**
-   * Simple client cleanup - just null the reference like the working example
-   * Let garbage collection handle the underlying connection cleanup
+   * Properly close the gRPC client connection before nullifying the reference
+   * This prevents connection accumulation by ensuring the underlying connection is closed
    */
   private nullifyClient(): void {
     if (this.client) {
-      this.logger?.debug(`Nullifying gRPC client for ${this.config.endpoint}`);
+      this.logger?.debug(`Closing and nullifying gRPC client for ${this.config.endpoint}`);
+
+      try {
+        // Access the underlying gRPC client and close it to prevent resource leaks
+        // The Yellowstone Client wraps the actual gRPC client in _client property
+        if ((this.client as any)._client && typeof (this.client as any)._client.close === 'function') {
+          (this.client as any)._client.close();
+        }
+      } catch (error) {
+        this.logger?.warn(`Error closing gRPC client for ${this.config.endpoint}: ${error}`);
+      }
+
       this.client = null;
     }
   }

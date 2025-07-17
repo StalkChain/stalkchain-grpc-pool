@@ -27,6 +27,8 @@ export class PoolManager extends EventEmitter<PoolEvents> implements IPool {
   private activeStreams: Map<string, any> = new Map(); // Store actual stream objects for cancellation
   private streamProcessors: Map<string, Promise<void>> = new Map();
   private streamRetryAttempts: Map<string, number> = new Map();
+  private connectionCounts: Map<string, number> = new Map(); // Track connection counts per endpoint
+  private connectionMonitoringTimer?: ReturnType<typeof setInterval>; // Timer for periodic connection monitoring
   private streamRetryTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
   private lastErrorTypes: Map<string, string> = new Map();
   private shutdownHandlersRegistered: boolean = false;
@@ -83,6 +85,9 @@ export class PoolManager extends EventEmitter<PoolEvents> implements IPool {
 
     this.isStarted = true;
     this.logger?.info('gRPC pool started successfully');
+
+    // Start periodic connection monitoring for debugging
+    this.startConnectionMonitoring();
   }
 
   /**
@@ -126,6 +131,9 @@ export class PoolManager extends EventEmitter<PoolEvents> implements IPool {
 
     // Stop message timeout monitoring
     this.stopMessageTimeoutMonitoring();
+
+    // Stop connection monitoring
+    this.stopConnectionMonitoring();
 
     // Stop all stream ping timers
     for (const [endpoint] of this.streamPingTimers) {
@@ -287,6 +295,9 @@ export class PoolManager extends EventEmitter<PoolEvents> implements IPool {
 
       this.activeStreams.set(endpoint, stream);
 
+      // Track this connection for monitoring
+      this.trackConnection(endpoint);
+
       // Reset retry attempts and error tracking on successful stream start
       this.streamRetryAttempts.delete(endpoint);
       this.lastErrorTypes.delete(endpoint);
@@ -389,6 +400,7 @@ export class PoolManager extends EventEmitter<PoolEvents> implements IPool {
         // Remove failed stream
         this.activeStreams.delete(endpoint);
         this.streamProcessors.delete(endpoint);
+        this.untrackConnection(endpoint);
 
         // Stop stream ping for this endpoint
         this.stopStreamPing(endpoint);
@@ -401,6 +413,7 @@ export class PoolManager extends EventEmitter<PoolEvents> implements IPool {
         this.logger?.info(`Stream ended for ${endpoint}`);
         this.activeStreams.delete(endpoint);
         this.streamProcessors.delete(endpoint);
+        this.untrackConnection(endpoint);
         resolve();
       });
 
@@ -409,6 +422,7 @@ export class PoolManager extends EventEmitter<PoolEvents> implements IPool {
         this.logger?.info(`Stream closed for ${endpoint}`);
         this.activeStreams.delete(endpoint);
         this.streamProcessors.delete(endpoint);
+        this.untrackConnection(endpoint);
         resolve();
       });
     });
@@ -743,8 +757,136 @@ export class PoolManager extends EventEmitter<PoolEvents> implements IPool {
   }
 
   /**
-   * Cancel stream for a specific endpoint with simple cleanup
-   * Simplified to match working example approach - just end the stream and null references
+   * Track connection creation for monitoring
+   */
+  private trackConnection(endpoint: string): void {
+    const current = this.connectionCounts.get(endpoint) || 0;
+    const newCount = current + 1;
+    this.connectionCounts.set(endpoint, newCount);
+
+    // Log warning if too many connections to the same endpoint
+    if (newCount > 3) {
+      this.logger?.warn(`High connection count for ${endpoint}: ${newCount} active connections`);
+    }
+
+    this.logger?.debug(`Connection count for ${endpoint}: ${newCount}`);
+  }
+
+  /**
+   * Track connection closure for monitoring
+   */
+  private untrackConnection(endpoint: string): void {
+    const current = this.connectionCounts.get(endpoint) || 0;
+    const newCount = Math.max(0, current - 1);
+
+    if (newCount === 0) {
+      this.connectionCounts.delete(endpoint);
+    } else {
+      this.connectionCounts.set(endpoint, newCount);
+    }
+
+    this.logger?.debug(`Connection count for ${endpoint}: ${newCount}`);
+  }
+
+  /**
+   * Get connection statistics for debugging
+   */
+  private getConnectionStats(): Record<string, number> {
+    return Object.fromEntries(this.connectionCounts.entries());
+  }
+
+  /**
+   * Start periodic connection monitoring for debugging
+   */
+  private startConnectionMonitoring(): void {
+    // Log connection stats every 30 seconds for debugging
+    this.connectionMonitoringTimer = setInterval(() => {
+      const stats = this.getConnectionStats();
+      const totalConnections = Object.values(stats).reduce((sum, count) => sum + count, 0);
+
+      if (totalConnections > 0) {
+        this.logger?.debug(`Connection monitoring - Total: ${totalConnections}, Per endpoint:`, stats);
+
+        // Warn if total connections are getting high
+        if (totalConnections > 10) {
+          this.logger?.warn(`High total connection count detected: ${totalConnections} connections`);
+        }
+      }
+    }, 30000); // 30 seconds
+  }
+
+  /**
+   * Stop connection monitoring
+   */
+  private stopConnectionMonitoring(): void {
+    if (this.connectionMonitoringTimer) {
+      clearInterval(this.connectionMonitoringTimer);
+      delete this.connectionMonitoringTimer;
+    }
+  }
+
+  /**
+   * Perform the complete three-step stream closure process to prevent resource leaks
+   * This implements the documented pattern: cancel() -> end() -> destroy()
+   */
+  private async performThreeStepStreamClosure(stream: any, endpoint: string, timeout = 5000): Promise<void> {
+    return new Promise<void>((resolve) => {
+      const timer = setTimeout(() => {
+        this.logger?.warn(`Stream closure timeout for ${endpoint}, forcing destroy`);
+        try {
+          if (stream && typeof stream.destroy === 'function') {
+            stream.destroy();
+          }
+        } catch (error) {
+          this.logger?.warn(`Error during forced stream destroy for ${endpoint}: ${error}`);
+        }
+        resolve();
+      }, timeout);
+
+      try {
+        // Step 1: Remove all listeners to prevent memory leaks
+        if (stream && typeof stream.removeAllListeners === 'function') {
+          stream.removeAllListeners();
+        }
+
+        // Step 2: Cancel the stream (if available)
+        if (stream && typeof stream.cancel === 'function') {
+          stream.cancel();
+        }
+
+        // Step 3: End the stream gracefully
+        if (stream && typeof stream.end === 'function') {
+          stream.end();
+        }
+
+        // Step 4: Destroy the stream immediately (fallback)
+        if (stream && typeof stream.destroy === 'function') {
+          stream.destroy();
+        }
+
+        // Set up close event listener to know when cleanup is complete
+        if (stream && typeof stream.on === 'function') {
+          stream.on('close', () => {
+            clearTimeout(timer);
+            resolve();
+          });
+        } else {
+          // If no close event available, resolve immediately
+          clearTimeout(timer);
+          resolve();
+        }
+
+      } catch (error) {
+        this.logger?.warn(`Error during three-step stream closure for ${endpoint}: ${error}`);
+        clearTimeout(timer);
+        resolve(); // Always resolve to prevent hanging
+      }
+    });
+  }
+
+  /**
+   * Cancel stream for a specific endpoint with comprehensive cleanup
+   * Uses the three-step closure process to prevent resource leaks
    */
   private async cancelStreamForEndpoint(endpoint: string, reason: string): Promise<void> {
     const stream = this.activeStreams.get(endpoint);
@@ -756,20 +898,16 @@ export class PoolManager extends EventEmitter<PoolEvents> implements IPool {
     this.logger?.info(`Cancelling stream for ${endpoint}: ${reason}`);
 
     try {
-      // Simple cleanup like the working example
+      // Implement the complete three-step stream closure process to prevent resource leaks
       if (stream) {
-        try {
-          stream.removeAllListeners();
-          stream.end();
-        } catch (error) {
-          this.logger?.warn(`Error cleaning up stream for ${endpoint}: ${error}`);
-        }
+        await this.performThreeStepStreamClosure(stream, endpoint);
       }
 
       // Clean up tracking data immediately
       this.activeStreams.delete(endpoint);
       this.streamProcessors.delete(endpoint);
       this.stopStreamPing(endpoint);
+      this.untrackConnection(endpoint);
 
       this.logger?.info(`Stream for ${endpoint} cancelled and cleaned up successfully`);
 
@@ -780,6 +918,7 @@ export class PoolManager extends EventEmitter<PoolEvents> implements IPool {
       this.activeStreams.delete(endpoint);
       this.streamProcessors.delete(endpoint);
       this.stopStreamPing(endpoint);
+      this.untrackConnection(endpoint);
     }
   }
 
