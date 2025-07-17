@@ -15,8 +15,8 @@ export class ConnectionManager extends EventEmitter<PoolEvents> {
   private client: Client | null = null;
   private state: ConnectionState = ConnectionState.DISCONNECTED;
   private reconnectAttempts: number = 0;
-  private reconnectTimer: NodeJS.Timeout | null = null;
-  private healthCheckTimer: NodeJS.Timeout | null = null;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private healthCheckTimer: ReturnType<typeof setInterval> | null = null;
   // private lastHealthCheck: number = 0; // Unused for now
   private consecutiveFailures: number = 0;
   private lastSuccessTime: number = 0;
@@ -122,8 +122,8 @@ export class ConnectionManager extends EventEmitter<PoolEvents> {
     this.stopHealthChecks();
     this.stopReconnectTimer();
 
-    // Properly close the gRPC client if it exists
-    await this.closeClient();
+    // Simple client cleanup - just null the reference like the working example
+    this.nullifyClient();
 
     this.state = ConnectionState.DISCONNECTED;
   }
@@ -157,8 +157,8 @@ export class ConnectionManager extends EventEmitter<PoolEvents> {
     this.state = ConnectionState.FAILED;
     this.consecutiveFailures = 3; // Set to threshold to trigger reconnection logic
 
-    // Properly close the client before reconnecting
-    await this.closeClient();
+    // Simple client cleanup - just null the reference like the working example
+    this.nullifyClient();
 
     // DO NOT emit connection-lost event here to avoid infinite loop
     // The pool manager already knows about the failure and called this method
@@ -210,7 +210,10 @@ export class ConnectionManager extends EventEmitter<PoolEvents> {
     }
 
     this.state = ConnectionState.CONNECTING;
-    
+
+    // Clean up any existing client before creating new one, like the working example
+    this.nullifyClient();
+
     try {
       const grpcOptions = {
         'grpc.max_receive_message_length': 64 * 1024 * 1024,
@@ -242,7 +245,10 @@ export class ConnectionManager extends EventEmitter<PoolEvents> {
       this.logger?.error(`Failed to connect to ${this.config.endpoint}: ${error}`);
       this.state = ConnectionState.FAILED;
       this.consecutiveFailures++;
-      
+
+      // Immediately null the client on failure like the working example
+      this.nullifyClient();
+
       this.emit('connection-lost', this.config.endpoint, error as Error);
 
       // For initial connection failures, schedule reconnect directly since there are no active streams to cancel
@@ -351,8 +357,8 @@ export class ConnectionManager extends EventEmitter<PoolEvents> {
         this.logger?.error(`Connection to ${this.config.endpoint} appears to be stale`);
         this.state = ConnectionState.FAILED;
 
-        // Properly close the client before emitting the event
-        await this.closeClient();
+        // Simple client cleanup - just null the reference like the working example
+        this.nullifyClient();
 
         // Emit connection-lost event to let the pool manager handle proper stream cancellation and reconnection
         // The pool manager will call forceReconnect() which will handle the reconnection scheduling
@@ -387,52 +393,12 @@ export class ConnectionManager extends EventEmitter<PoolEvents> {
   }
 
   /**
-   * Properly close the gRPC client connection using the three-step process
-   * This is critical for paid servers with connection limits to prevent connection accumulation
+   * Simple client cleanup - just null the reference like the working example
+   * Let garbage collection handle the underlying connection cleanup
    */
-  private async closeClient(): Promise<void> {
-    if (!this.client) {
-      return;
-    }
-
-    this.logger?.debug(`Closing gRPC client for ${this.config.endpoint}`);
-
-    try {
-      // The ConnectionManager is responsible for closing the gRPC client connection
-      // Stream closure (using stream.cancel(), stream.end(), stream.destroy())
-      // is handled by the PoolManager which manages the streams
-
-      // The Yellowstone gRPC client is essentially a stream, so we use the same
-      // three-step closure process as we do for streams in the PoolManager:
-      // 1. client.cancel() - cancels the client connection
-      // 2. client.end() - ends the client connection gracefully
-      // 3. client.destroy() - destroys the client connection immediately
-
-      // Use type assertion to access the stream methods on the client
-      const clientAsStream = this.client as any;
-
-      this.logger?.debug(`Step 1: Calling client.cancel() for ${this.config.endpoint}`);
-      if (typeof clientAsStream.cancel === 'function') {
-        clientAsStream.cancel();
-      }
-
-      this.logger?.debug(`Step 2: Calling client.end() for ${this.config.endpoint}`);
-      if (typeof clientAsStream.end === 'function') {
-        clientAsStream.end();
-      }
-
-      this.logger?.debug(`Step 3: Calling client.destroy() for ${this.config.endpoint}`);
-      if (typeof clientAsStream.destroy === 'function') {
-        clientAsStream.destroy();
-      }
-
-      // Always null the client reference after attempting to close
-      this.client = null;
-
-      this.logger?.debug(`gRPC client connection closed using three-step process for ${this.config.endpoint}`);
-    } catch (error) {
-      this.logger?.warn(`Error during three-step client closure for ${this.config.endpoint}: ${error}`);
-      // Still null the client even if there was an error to prevent resource leaks
+  private nullifyClient(): void {
+    if (this.client) {
+      this.logger?.debug(`Nullifying gRPC client for ${this.config.endpoint}`);
       this.client = null;
     }
   }

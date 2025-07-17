@@ -73,7 +73,7 @@ class LRUCache<K, V> {
  */
 export class DeduplicationEngine {
   private cache: LRUCache<string, CacheEntry>;
-  private cleanupTimer: NodeJS.Timeout | null = null;
+  private cleanupTimer: ReturnType<typeof setInterval> | null = null;
   private duplicateCount: number = 0;
   private processedCount: number = 0;
   private lastCleanup: number = 0;

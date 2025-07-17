@@ -44,7 +44,7 @@ interface ConnectionHealth {
 export class HealthMonitor extends EventEmitter<PoolEvents> {
   private connections: Map<string, ConnectionManager> = new Map();
   private healthStatus: Map<string, ConnectionHealth> = new Map();
-  private monitoringTimer: NodeJS.Timeout | null = null;
+  private monitoringTimer: ReturnType<typeof setInterval> | null = null;
   private isMonitoring: boolean = false;
 
   constructor(

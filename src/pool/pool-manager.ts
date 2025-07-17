@@ -27,13 +27,13 @@ export class PoolManager extends EventEmitter<PoolEvents> implements IPool {
   private activeStreams: Map<string, any> = new Map(); // Store actual stream objects for cancellation
   private streamProcessors: Map<string, Promise<void>> = new Map();
   private streamRetryAttempts: Map<string, number> = new Map();
-  private streamRetryTimers: Map<string, NodeJS.Timeout> = new Map();
+  private streamRetryTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
   private lastErrorTypes: Map<string, string> = new Map();
   private shutdownHandlersRegistered: boolean = false;
   private activeSubscriptionRequest: any = null;
-  private messageTimeoutTimer: NodeJS.Timeout | null = null;
+  private messageTimeoutTimer: ReturnType<typeof setInterval> | null = null;
   private messageTimeoutCheckInterval: number = 30000; // Check every 30 seconds by default
-  private streamPingTimers: Map<string, NodeJS.Timeout> = new Map();
+  private streamPingTimers: Map<string, ReturnType<typeof setInterval>> = new Map();
   private streamPingSequence: Map<string, number> = new Map();
   private pendingPongs: Map<string, Set<number>> = new Map();
   private missedPongCounts: Map<string, number> = new Map();
@@ -743,8 +743,8 @@ export class PoolManager extends EventEmitter<PoolEvents> implements IPool {
   }
 
   /**
-   * Cancel stream for a specific endpoint with proper cleanup
-   * This is critical for preventing resource leaks when reconnecting
+   * Cancel stream for a specific endpoint with simple cleanup
+   * Simplified to match working example approach - just end the stream and null references
    */
   private async cancelStreamForEndpoint(endpoint: string, reason: string): Promise<void> {
     const stream = this.activeStreams.get(endpoint);
@@ -756,60 +756,17 @@ export class PoolManager extends EventEmitter<PoolEvents> implements IPool {
     this.logger?.info(`Cancelling stream for ${endpoint}: ${reason}`);
 
     try {
-      // Create a promise that resolves when the stream is properly closed
-      const cancelPromise = new Promise<void>((resolve) => {
-        // Set up error handler for the cancellation event
-        const originalErrorHandler = stream.listeners('error')[0];
-        if (originalErrorHandler) {
-          stream.removeListener('error', originalErrorHandler);
-        }
-
-        // Add our own error handler that detects cancellation
-        stream.on('error', (err: any) => {
-          if (err.code === 1 || (err.message && err.message.includes('Cancelled'))) {
-            this.logger?.debug(`Stream for ${endpoint} cancelled successfully`);
-            resolve();
-          } else {
-            this.logger?.warn(`Error during stream cancellation for ${endpoint}: ${err}`);
-            resolve(); // Still resolve to avoid hanging
-          }
-        });
-
-        // Add close handler
-        stream.on('close', () => {
-          this.logger?.debug(`Stream for ${endpoint} closed`);
-          resolve();
-        });
-
-        // Close the stream using the proper sequence as per Yellowstone gRPC documentation:
-        // 1. stream.cancel() - cancels the stream
-        // 2. stream.end() - ends the stream gracefully
-        // 3. stream.destroy() - destroys the stream immediately
+      // Simple cleanup like the working example
+      if (stream) {
         try {
-          this.logger?.debug(`Step 1: Calling stream.cancel() for ${endpoint}`);
-          stream.cancel();
-
-          this.logger?.debug(`Step 2: Calling stream.end() for ${endpoint}`);
+          stream.removeAllListeners();
           stream.end();
-
-          this.logger?.debug(`Step 3: Calling stream.destroy() for ${endpoint}`);
-          stream.destroy();
-        } catch (streamCloseError) {
-          this.logger?.warn(`Error during stream closure sequence for ${endpoint}: ${streamCloseError}`);
-          resolve(); // Still resolve to avoid hanging
+        } catch (error) {
+          this.logger?.warn(`Error cleaning up stream for ${endpoint}: ${error}`);
         }
+      }
 
-        // Add timeout to prevent hanging
-        setTimeout(() => {
-          this.logger?.warn(`Stream cancellation timeout for ${endpoint}, forcing cleanup`);
-          resolve();
-        }, 3000);
-      });
-
-      // Wait for the stream to be properly cancelled
-      await cancelPromise;
-
-      // Clean up tracking data
+      // Clean up tracking data immediately
       this.activeStreams.delete(endpoint);
       this.streamProcessors.delete(endpoint);
       this.stopStreamPing(endpoint);
