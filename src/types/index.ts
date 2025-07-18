@@ -1,214 +1,155 @@
-import { EventEmitter } from 'eventemitter3';
+/**
+ * types/index.ts - Basic type definitions for gRPC pool MVP
+ *
+ * Simple types for connecting to 3 endpoints and streaming transaction signatures.
+ * Based on Triton-One Yellowstone gRPC patterns.
+ *
+ * @module types
+ * @author StalkChain Team
+ * @version 0.1.0
+ */
 
 /**
- * Configuration for a single gRPC connection
+ * Configuration for a single gRPC endpoint
  */
-export interface ConnectionConfig {
-  /** gRPC endpoint URL */
+export interface PoolEndpoint {
   endpoint: string;
-  /** Authentication token */
   token: string;
-  /** Maximum number of reconnection attempts */
-  reconnectAttempts: number;
-  /** Delay between reconnection attempts in milliseconds */
-  reconnectDelay: number;
-  /** Health check interval in milliseconds */
-  healthCheckInterval: number;
-  /** Connection timeout in milliseconds */
-  connectionTimeout: number;
-  /** Request timeout in milliseconds */
-  requestTimeout: number;
-  /** Custom gRPC options */
-  grpcOptions?: Record<string, unknown>;
-  /** Skip ping health checks for this connection (useful for public endpoints) */
-  noPing?: boolean;
+  ping?: boolean;
 }
 
 /**
- * Configuration for stream ping/pong keep-alive functionality
- */
-export interface StreamPingConfig {
-  /** Enable stream ping/pong keep-alive */
-  enabled: boolean;
-  /** Interval between ping messages in milliseconds */
-  interval: number;
-  /** Timeout for pong response in milliseconds */
-  timeout: number;
-  /** Maximum number of missed pongs before considering stream stale */
-  maxMissedPongs: number;
-}
-
-/**
- * Configuration for the gRPC pool
+ * Pool configuration with multiple endpoints
  */
 export interface PoolConfig {
-  /** Array of connection configurations */
-  connections: ConnectionConfig[];
-  /** Deduplication window size in milliseconds */
-  deduplicationWindow: number;
-  /** Maximum number of items in deduplication cache */
-  maxCacheSize: number;
-  /** Circuit breaker configuration */
-  circuitBreaker: CircuitBreakerConfig;
-  /** Batch processing configuration */
-  batchProcessing: BatchConfig;
-  /** Enable metrics collection */
-  enableMetrics: boolean;
-  /** Custom logger */
-  logger?: Logger;
-  /** Message timeout in milliseconds - connection considered stale if no messages received within this time */
-  messageTimeout?: number;
-  /** Stream ping configuration for keep-alive functionality */
-  streamPing?: StreamPingConfig;
+  endpoints: PoolEndpoint[];
 }
 
 /**
- * Circuit breaker configuration
+ * Optional configuration for pool behavior and timing
  */
-export interface CircuitBreakerConfig {
-  /** Failure threshold percentage (0-100) */
-  errorThresholdPercentage: number;
-  /** Minimum number of requests before circuit breaker can open */
-  minimumRequestThreshold: number;
-  /** Time in milliseconds to wait before attempting to close circuit */
-  resetTimeout: number;
-  /** Request timeout in milliseconds */
-  timeout: number;
+export interface PoolOptions {
+  /** Ping interval in milliseconds (default: 30000) */
+  pingIntervalMs?: number;
+  
+  /** Stale connection timeout in milliseconds (default: 120000) */
+  staleTimeoutMs?: number;
+  
+  /** Deduplication TTL in milliseconds (default: 30000) */
+  deduplicationTtlMs?: number;
+  
+  /** Maximum signatures in deduplication cache (default: 10000) */
+  maxCacheSize?: number;
+  
+  /** Initial retry delay in milliseconds (default: 500) */
+  initialRetryDelayMs?: number;
+  
+  /** Maximum retry delay in milliseconds (default: 30000) */
+  maxRetryDelayMs?: number;
+  
+  /** Retry backoff multiplier (default: 2) */
+  retryBackoffFactor?: number;
 }
 
 /**
- * Batch processing configuration
+ * Subscription request for Yellowstone gRPC
  */
-export interface BatchConfig {
-  /** Maximum batch size */
-  maxBatchSize: number;
-  /** Maximum time to wait before processing batch in milliseconds */
-  maxBatchTimeout: number;
-  /** Enable batch processing */
-  enabled: boolean;
+export interface SubscribeRequest {
+  accounts?: Record<string, AccountFilter>;
+  transactions?: Record<string, TransactionFilter>;
+  commitment?: string;
 }
 
 /**
- * Health metrics for a connection
+ * Account filter for program accounts
  */
-export interface HealthMetrics {
-  /** Connection endpoint */
-  endpoint: string;
-  /** Whether the connection is healthy */
-  isHealthy: boolean;
-  /** Connection latency in milliseconds */
-  latency: number;
-  /** Error rate (0-1) */
-  errorRate: number;
-  /** Timestamp of last successful request */
-  lastSuccessTime: number;
-  /** Number of consecutive failures */
-  consecutiveFailures: number;
-  /** Timestamp of last message received */
-  lastMessageTime?: number;
-  /** Last error message if any */
-  lastError?: string;
+export interface AccountFilter {
+  owner?: string[];
 }
 
 /**
- * Connection state enumeration
+ * Transaction filter
  */
-export enum ConnectionState {
-  DISCONNECTED = 'DISCONNECTED',
-  CONNECTING = 'CONNECTING',
-  CONNECTED = 'CONNECTED',
-  RECONNECTING = 'RECONNECTING',
-  FAILED = 'FAILED'
+export interface TransactionFilter {
+  accountInclude?: string[];
+  vote?: boolean;
+  failed?: boolean;
 }
 
 /**
- * Circuit breaker state enumeration
+ * Transaction data from stream
  */
-export enum CircuitBreakerState {
-  CLOSED = 'CLOSED',
-  OPEN = 'OPEN',
-  HALF_OPEN = 'HALF_OPEN'
+export interface TransactionUpdate {
+  signature?: string;
+  slot?: number;
+  meta?: {
+    err?: any;
+  };
 }
 
 /**
- * Transaction data interface
+ * Full gRPC transaction data structure
  */
-export interface Transaction {
-  /** Unique transaction signature (kept as Buffer for efficient deduplication) */
-  signature: Buffer | string;
-  /** Transaction slot */
-  slot: number;
-  /** Account keys involved */
-  accountKeys: string[];
-  /** Transaction instructions */
-  instructions: unknown[];
-  /** Processing timestamp */
-  timestamp: number;
-  /** Source connection identifier */
-  source: string;
-  /** Raw transaction data */
-  raw: unknown;
+export interface FullTransactionData {
+  transaction?: {
+    signature?: Buffer;
+    isVote?: boolean;
+    transaction?: {
+      signatures?: Buffer[];
+      message?: any;
+    };
+  };
+  slot?: number;
+  meta?: any;
+  filters?: string[];
+  [key: string]: any; // Allow additional gRPC fields
 }
 
 /**
- * Processed message interface
+ * Stream data event
+ */
+export interface StreamData {
+  transaction?: FullTransactionData;
+  pong?: { id: number };
+  receivedTimestamp?: number; // When client received this data from gRPC
+}
+
+/**
+ * Processed message from the pool with source information
  */
 export interface ProcessedMessage {
-  /** Message type */
-  type: 'transaction' | 'account' | 'slot' | 'ping';
-  /** Message data */
-  data: unknown;
-  /** Source connection */
+  data: FullTransactionData;
   source: string;
-  /** Processing timestamp */
   timestamp: number;
-  /** Whether message was deduplicated */
-  isDuplicate: boolean;
 }
 
 /**
- * Logger interface
+ * Transaction event data emitted when a unique transaction is received
  */
-export interface Logger {
-  debug(message: string, meta?: unknown): void;
-  info(message: string, meta?: unknown): void;
-  warn(message: string, meta?: unknown): void;
-  error(message: string, meta?: unknown): void;
+export interface TransactionEvent {
+  signature: string;        // Base58 encoded transaction signature
+  data: FullTransactionData; // Complete gRPC transaction object
+  source: string;           // Which endpoint received this transaction
+  timestamp: number;        // When the transaction was received
 }
 
 /**
- * Pool events interface
+ * Duplicate event data emitted when a duplicate transaction is filtered
  */
-export interface PoolEvents {
-  'connection-established': (endpoint: string) => void;
-  'connection-lost': (endpoint: string, error: Error) => void;
-  'connection-recovered': (endpoint: string) => void;
-  'failover': (from: string, to: string, reason: string) => void;
-  'circuit-breaker-opened': (endpoint: string) => void;
-  'circuit-breaker-closed': (endpoint: string) => void;
-  'message-processed': (message: ProcessedMessage) => void;
-  'message-deduplicated': (signature: string, source: string) => void;
-  'health-check': (metrics: HealthMetrics[]) => void;
-  'error': (error: Error, context?: string) => void;
-  'metrics-updated': (metrics: Record<string, number>) => void;
+export interface DuplicateEvent {
+  signature: string;  // Base58 encoded signature (full signature)
+  source: string;     // Which endpoint received the duplicate
+  timestamp: number;  // When the duplicate was detected
 }
 
 /**
- * Base pool interface
+ * Endpoint connection event data for monitoring individual endpoint status
  */
-export interface IPool extends EventEmitter<PoolEvents> {
-  /** Start the pool */
-  start(): Promise<void>;
-  /** Stop the pool */
-  stop(): Promise<void>;
-  /** Subscribe to gRPC stream */
-  subscribe(request: unknown): Promise<void>;
-  /** Get current health status */
-  getHealthStatus(): HealthMetrics[];
-  /** Get pool metrics */
-  getMetrics(): Record<string, number>;
-  /** Check if pool is running */
-  isRunning(): boolean;
+export interface EndpointEvent {
+  endpoint: string;   // Endpoint URL (e.g., "grpc.solanatracker.io") 
+  status: 'connected' | 'disconnected' | 'reconnected'; // Connection status
+  timestamp: number;  // When the status change occurred
+  details?: string;   // Optional additional information (e.g., error message)
 }
 
-// SubscriptionRequest is now imported from @triton-one/yellowstone-grpc as SubscribeRequest
+ 

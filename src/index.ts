@@ -1,46 +1,24 @@
-// Main exports
-export { PoolManager } from './pool/pool-manager';
-export { ConnectionManager } from './connection/connection-manager';
-export { DeduplicationEngine } from './deduplication/deduplication-engine';
-export { CircuitBreaker } from './circuit-breaker/circuit-breaker';
-export { HealthMonitor } from './health/health-monitor';
-export { MetricsCollector } from './metrics/metrics-collector';
+/**
+ * stalkchain-grpc-pool - Main exports
+ *
+ * Simple gRPC pool for connecting to 3 Solana endpoints and streaming
+ * transaction signatures. Clean API that handles all complexity internally.
+ *
+ * @module stalkchain-grpc-pool
+ * @author StalkChain Team
+ * @version 0.1.0
+ */
 
-// Type exports
-export {
-  ConnectionConfig,
-  PoolConfig,
-  CircuitBreakerConfig,
-  BatchConfig,
-  StreamPingConfig,
-  HealthMetrics,
-  ConnectionState,
-  CircuitBreakerState,
-  Transaction,
-  ProcessedMessage,
-  Logger,
-  PoolEvents,
-  IPool
+export { GrpcPool } from './lib/pool';
+export { 
+  PoolConfig, 
+  PoolOptions, 
+  PoolEndpoint, 
+  SubscribeRequest, 
+  TransactionFilter, 
+  AccountFilter,
+  TransactionEvent,
+  DuplicateEvent,
+  EndpointEvent
 } from './types';
-
-// Utility exports
-export { createDefaultLogger, LogLevel } from './utils/logger';
-export {
-  createDefaultPoolConfig,
-  createDefaultStreamPingConfig
-} from './utils/config';
-export {
-  GracefulShutdownManager,
-  getGracefulShutdownManager,
-  registerPoolForGracefulShutdown,
-  performGracefulShutdown
-} from './utils/graceful-shutdown';
-
-// Factory functions for easy setup
-export {
-  createGrpcPool,
-  createHighAvailabilityGrpcPool,
-  createSolanaGrpcPool,
-  PoolFactory,
-  PoolBuilder
-} from './factory/pool-factory';
+export { CommitmentLevel, DEFAULT_CONFIG } from './constants'; 
