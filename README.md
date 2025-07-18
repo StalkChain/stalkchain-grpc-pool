@@ -21,7 +21,17 @@ High-performance, production-ready Solana gRPC connection pool with active-activ
 ## Installation
 
 ```bash
-pnpm install stalkchain-grpc-pool
+npm install @stalkchain/grpc-pool
+```
+
+### TypeScript / ES Modules
+```typescript
+import { GrpcPool } from '@stalkchain/grpc-pool';
+```
+
+### CommonJS
+```javascript
+const { GrpcPool } = require('@stalkchain/grpc-pool');
 ```
 
 ### Local Testing
@@ -30,8 +40,9 @@ For testing the package locally before npm publication, see [MANUAL_INSTALL.md](
 
 ## Quick Start
 
+### TypeScript / ES Modules
 ```typescript
-import { GrpcPool } from 'stalkchain-grpc-pool';
+import { GrpcPool } from '@stalkchain/grpc-pool';
 
 const pool = new GrpcPool({
   endpoints: [

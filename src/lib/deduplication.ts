@@ -8,7 +8,7 @@
  *
  * @module lib/deduplication
  * @author StalkChain Team
- * @version 0.1.0
+ * @version 1.1.0
  */
 
 import { DEFAULT_CONFIG } from '../constants';

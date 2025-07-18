@@ -7,7 +7,7 @@
  *
  * @module lib/pool
  * @author StalkChain Team
- * @version 0.1.0
+ * @version 1.1.0
  */
 
 import { EventEmitter } from 'events';

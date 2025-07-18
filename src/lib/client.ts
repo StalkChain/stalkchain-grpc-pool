@@ -7,7 +7,7 @@
  *
  * @module lib/client
  * @author StalkChain Team
- * @version 0.1.0
+ * @version 1.1.1
  */
 
 import { EventEmitter } from 'events';
@@ -63,12 +63,11 @@ export class GrpcClient extends EventEmitter {
       
       // Set up stream event handlers
       this.stream.on('data', (data: any) => {
-        // Update last message timestamp on any data received
-        this.lastMessageTimestamp = Date.now();
-        
         const streamData: StreamData = {};
         
         if (data.transaction) {
+          // Only update last message timestamp for actual transactions
+          this.lastMessageTimestamp = Date.now();
           // Pass FULL transaction data to pool (not just extracted fields)
           // Pool will handle deduplication and emit complete data to user
           streamData.transaction = data.transaction; // Complete gRPC transaction object

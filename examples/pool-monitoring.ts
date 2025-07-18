@@ -46,7 +46,7 @@ async function main() {
       {
         endpoint: 'https://solana-yellowstone-grpc.publicnode.com',
         token: '',
-        ping: false
+        ping: true
       }
     ]
   };
@@ -116,13 +116,13 @@ async function main() {
     transactionCount++;
     const shortEndpoint = event.source.replace('https://', '').split('.')[0];
     const truncatedSig = event.signature.substring(0, 8) + '...';
-    console.log(`📦 [${new Date().toISOString()}] TX ${truncatedSig} from ${shortEndpoint} (${transactionCount} total)`);
+    // console.log(`📦 [${new Date().toISOString()}] TX ${truncatedSig} from ${shortEndpoint} (${transactionCount} total)`);
   });
 
   pool.on('duplicate', (event: DuplicateEvent) => {
     duplicateCount++;
     const shortEndpoint = event.source.replace('https://', '').split('.')[0];
-    console.log(`🔄 [${new Date().toISOString()}] Duplicate filtered from ${shortEndpoint} (${duplicateCount} total)`);
+    // console.log(`🔄 [${new Date().toISOString()}] Duplicate filtered from ${shortEndpoint} (${duplicateCount} total)`);
   });
 
   // === ERROR HANDLING ===

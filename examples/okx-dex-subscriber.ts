@@ -83,7 +83,7 @@ async function main() {
       {
         endpoint: 'https://solana-yellowstone-grpc.publicnode.com',
         token: '',
-        ping: false
+        ping: true
       }
     ]
   };
