@@ -7,7 +7,7 @@
  *
  * @module lib/pool
  * @author StalkChain Team
- * @version 1.1.0
+ * @version 1.1.2
  */
 
 import { EventEmitter } from 'events';
@@ -49,7 +49,7 @@ export class GrpcPool extends EventEmitter {
   private staleCheckInterval: NodeJS.Timeout | null = null;
   private currentSubscription: any = null;
   private deduplicationService: DeduplicationService;
-  private endpointStates: Map<string, boolean> = new Map(); // Track individual endpoint connection states
+  private endpointStates: Map<string, boolean> = new Map(); // Track individual endpoint connection states by clientId
 
   constructor(config: PoolConfig, options: PoolOptions = {}) {
     super();
@@ -78,15 +78,16 @@ export class GrpcPool extends EventEmitter {
   async connect(): Promise<void> {
     console.log(`🚀 Connecting to ${this.config.endpoints.length} gRPC endpoints...`);
 
-    // Create clients for each endpoint and initialize their states
+    // Create clients for each endpoint and initialize their states by clientId
     this.clients = this.config.endpoints.map(endpoint => {
-      this.endpointStates.set(endpoint.endpoint, false);
-      return new GrpcClient(endpoint, {
+      const client = new GrpcClient(endpoint, {
         staleTimeoutMs: this.options.staleTimeoutMs,
         initialRetryDelayMs: this.options.initialRetryDelayMs,
         maxRetryDelayMs: this.options.maxRetryDelayMs,
         retryBackoffFactor: this.options.retryBackoffFactor
       });
+      this.endpointStates.set(client.getId(), false);
+      return client;
     });
 
     // Connect to all endpoints
@@ -112,10 +113,12 @@ export class GrpcPool extends EventEmitter {
     // Update endpoint states for initially connected clients
     connectedClients.forEach(client => {
       const endpoint = client.getEndpoint().endpoint;
-      this.endpointStates.set(endpoint, true);
+      const clientId = client.getId();
+      this.endpointStates.set(clientId, true);
       
       // Emit initial endpoint connected events
       const endpointEvent: EndpointEvent = {
+        clientId,
         endpoint,
         status: 'connected',
         timestamp: Date.now()
@@ -193,8 +196,9 @@ export class GrpcPool extends EventEmitter {
 
       client.on('connected', () => {
         const endpoint = client.getEndpoint().endpoint;
-        const wasConnected = this.endpointStates.get(endpoint);
-        this.endpointStates.set(endpoint, true);
+        const clientId = client.getId();
+        const wasConnected = this.endpointStates.get(clientId);
+        this.endpointStates.set(clientId, true);
         
         // Determine status: reconnected if was previously false, connected if undefined or first time
         let status: 'connected' | 'reconnected' = 'connected';
@@ -204,6 +208,7 @@ export class GrpcPool extends EventEmitter {
         
         // Emit endpoint event
         const endpointEvent: EndpointEvent = {
+          clientId,
           endpoint,
           status,
           timestamp: Date.now()
@@ -216,10 +221,12 @@ export class GrpcPool extends EventEmitter {
 
       client.on('disconnected', () => {
         const endpoint = client.getEndpoint().endpoint;
-        this.endpointStates.set(endpoint, false);
+        const clientId = client.getId();
+        this.endpointStates.set(clientId, false);
         
         // Emit endpoint disconnection event
         const endpointEvent: EndpointEvent = {
+          clientId,
           endpoint,
           status: 'disconnected',
           timestamp: Date.now()
@@ -386,11 +393,12 @@ export class GrpcPool extends EventEmitter {
   /**
    * Get connection status for monitoring
    */
-  getStatus(): { endpoint: string; connected: boolean; timeSinceLastMessage?: number }[] {
+  getStatus(): { clientId: string; endpoint: string; connected: boolean; timeSinceLastMessage?: number }[] {
     return this.clients.map(client => {
-      const status: { endpoint: string; connected: boolean; timeSinceLastMessage?: number } = {
-      endpoint: client.getEndpoint().endpoint,
-      connected: client.isConnected()
+      const status: { clientId: string; endpoint: string; connected: boolean; timeSinceLastMessage?: number } = {
+        clientId: client.getId(),
+        endpoint: client.getEndpoint().endpoint,
+        connected: client.isConnected()
       };
       
       if (client.isConnected()) {

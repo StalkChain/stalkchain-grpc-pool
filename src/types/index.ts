@@ -6,7 +6,7 @@
  *
  * @module types
  * @author StalkChain Team
- * @version 0.1.0
+ * @version 1.1.2
  */
 
 /**
@@ -146,6 +146,7 @@ export interface DuplicateEvent {
  * Endpoint connection event data for monitoring individual endpoint status
  */
 export interface EndpointEvent {
+  clientId: string;   // Unique client instance id
   endpoint: string;   // Endpoint URL (e.g., "grpc.solanatracker.io") 
   status: 'connected' | 'disconnected' | 'reconnected'; // Connection status
   timestamp: number;  // When the status change occurred

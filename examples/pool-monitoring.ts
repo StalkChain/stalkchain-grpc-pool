@@ -47,6 +47,13 @@ async function main() {
         endpoint: 'https://solana-yellowstone-grpc.publicnode.com',
         token: '',
         ping: true
+      },
+      // Duplicate connection to the same PublicNode URL to demonstrate
+      // per-client tracking with identical endpoints
+      {
+        endpoint: 'https://solana-yellowstone-grpc.publicnode.com',
+        token: '',
+        ping: true
       }
     ]
   };
@@ -67,8 +74,9 @@ async function main() {
 
   const pool = new GrpcPool(poolConfig, poolOptions);
 
-  // Track endpoint states and statistics for monitoring
-  const endpointStates = new Map<string, boolean>();
+  // Track client states (by clientId) and statistics for monitoring
+  const clientStates = new Map<string, boolean>();
+  const clientEndpoint = new Map<string, string>();
   const connectionEvents = new Map<string, number>();
   let poolStartTime = Date.now();
   let transactionCount = 0;
@@ -88,21 +96,22 @@ async function main() {
   // === ENDPOINT CONNECTION MONITORING ===
   pool.on('endpoint', (event: EndpointEvent) => {
     const timestamp = new Date(event.timestamp).toISOString();
-    const shortEndpoint = event.endpoint.replace('https://', '').split('.')[0];
-    endpointStates.set(event.endpoint, event.status !== 'disconnected');
+    const endpointLabel = event.endpoint; // full URL
+    clientStates.set(event.clientId, event.status !== 'disconnected');
+    clientEndpoint.set(event.clientId, event.endpoint);
     
-    // Count connection events per endpoint
-    const eventKey = `${event.endpoint}-${event.status}`;
+    // Count connection events per client (use '::' to avoid '-' in clientId)
+    const eventKey = `${event.clientId}::${event.status}`;
     connectionEvents.set(eventKey, (connectionEvents.get(eventKey) || 0) + 1);
     
     const statusIcon = event.status === 'connected' ? '🟢' : 
                       event.status === 'reconnected' ? '🔄' : '🔴';
     
-    console.log(`${statusIcon} [${timestamp}] ${shortEndpoint}: ${event.status.toUpperCase()}`);
+    console.log(`${statusIcon} [${timestamp}] ${endpointLabel} [${event.clientId}]: ${event.status.toUpperCase()}`);
     
     // Show current connection summary
-    const connectedCount = Array.from(endpointStates.values()).filter(connected => connected).length;
-    const totalEndpoints = endpointStates.size;
+    const connectedCount = Array.from(clientStates.values()).filter(connected => connected).length;
+    const totalEndpoints = clientStates.size;
     console.log(`   └─ Pool status: ${connectedCount}/${totalEndpoints} endpoints active`);
     
     // Show details if available
@@ -114,15 +123,15 @@ async function main() {
   // === MINIMAL TRANSACTION MONITORING (for connection validation) ===
   pool.on('transaction', (event: TransactionEvent) => {
     transactionCount++;
-    const shortEndpoint = event.source.replace('https://', '').split('.')[0];
+    const endpointLabel = event.source; // full URL
     const truncatedSig = event.signature.substring(0, 8) + '...';
-    // console.log(`📦 [${new Date().toISOString()}] TX ${truncatedSig} from ${shortEndpoint} (${transactionCount} total)`);
+    // console.log(`📦 [${new Date().toISOString()}] TX ${truncatedSig} from ${endpointLabel} (${transactionCount} total)`);
   });
 
   pool.on('duplicate', (event: DuplicateEvent) => {
     duplicateCount++;
-    const shortEndpoint = event.source.replace('https://', '').split('.')[0];
-    // console.log(`🔄 [${new Date().toISOString()}] Duplicate filtered from ${shortEndpoint} (${duplicateCount} total)`);
+    const endpointLabel = event.source; // full URL
+    // console.log(`🔄 [${new Date().toISOString()}] Duplicate filtered from ${endpointLabel} (${duplicateCount} total)`);
   });
 
   // === ERROR HANDLING ===
@@ -185,8 +194,8 @@ async function main() {
     // Add periodic status reporting every 30 seconds
     const statusInterval = setInterval(() => {
       const uptime = Math.round((Date.now() - poolStartTime) / 1000);
-      const connectedCount = Array.from(endpointStates.values()).filter(connected => connected).length;
-      const totalEndpoints = endpointStates.size;
+      const connectedCount = Array.from(clientStates.values()).filter(connected => connected).length;
+      const totalEndpoints = clientStates.size;
       
       console.log(`⏰ [${new Date().toISOString()}] Status Report:`);
       console.log(`   └─ Uptime: ${uptime}s | Active: ${connectedCount}/${totalEndpoints} endpoints`);
@@ -220,23 +229,23 @@ async function main() {
       console.log(`   Transactions processed: ${transactionCount}`);
       console.log(`   Duplicates filtered: ${duplicateCount}`);
       
-      // Show final endpoint states
-      if (endpointStates.size > 0) {
-        console.log('\n📡 Final endpoint states:');
-        endpointStates.forEach((connected, endpoint) => {
-          const shortEndpoint = endpoint.replace('https://', '').split('.')[0];
+      // Show final client states
+      if (clientStates.size > 0) {
+        console.log('\n📡 Final client states:');
+        clientStates.forEach((connected, clientId) => {
+          const endpoint = clientEndpoint.get(clientId) || 'unknown';
           const status = connected ? '🟢 CONNECTED' : '🔴 DISCONNECTED';
-          console.log(`   ${shortEndpoint}: ${status}`);
+          console.log(`   ${endpoint} [${clientId}]: ${status}`);
         });
       }
       
       // Show connection event statistics
       if (connectionEvents.size > 0) {
-        console.log('\n🔄 Connection event summary:');
+        console.log('\n🔄 Connection event summary (per client):');
         connectionEvents.forEach((count, eventKey) => {
-          const [endpoint, eventType] = eventKey.split('-');
-          const shortEndpoint = endpoint?.replace('https://', '').split('.')[0];
-          console.log(`   ${shortEndpoint} ${eventType}: ${count} times`);
+          const [clientId, eventType] = eventKey.split('::');
+          const endpoint = clientEndpoint.get(clientId || '') || 'unknown';
+          console.log(`   ${endpoint} [${clientId}] ${eventType}: ${count} times`);
         });
       }
 

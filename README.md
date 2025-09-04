@@ -61,7 +61,7 @@ pool.on('transaction', (transaction) => {
 
 // Monitor pool status
 pool.on('connected', () => console.log('Pool ready!'));
-pool.on('endpoint', (event) => console.log(`${event.endpoint}: ${event.status}`));
+pool.on('endpoint', (event) => console.log(`${event.clientId} ${event.endpoint}: ${event.status}`));
 
 // Connect and subscribe
 await pool.connect();
@@ -207,6 +207,7 @@ Emitted when any individual endpoint changes connection status. Use this for det
 ```typescript
 pool.on('endpoint', (event: EndpointEvent) => {
   // event.endpoint - Full endpoint URL (e.g., "https://grpc.solanatracker.io")
+  // event.clientId - Unique client instance id (useful with duplicate URLs)
   // event.status - 'connected' | 'disconnected' | 'reconnected'
   // event.timestamp - When status change occurred (unix timestamp in ms)
   // event.details - Optional error message or additional info
@@ -223,6 +224,7 @@ pool.on('endpoint', (event: EndpointEvent) => {
 **EndpointEvent Interface:**
 ```typescript
 interface EndpointEvent {
+  clientId: string;   // Unique client instance id
   endpoint: string;   // Endpoint URL (e.g., "https://grpc.solanatracker.io") 
   status: 'connected' | 'disconnected' | 'reconnected'; // Connection status
   timestamp: number;  // When the status change occurred
@@ -299,14 +301,14 @@ pool.on('transaction', (tx) => {
 
 ### Connection Health Monitoring
 ```typescript
-// Track endpoint health
-const endpointStates = new Map();
+// Track connection status per client
+const clientStates = new Map<string, boolean>();
 
 pool.on('endpoint', (event) => {
-  endpointStates.set(event.endpoint, event.status !== 'disconnected');
+  clientStates.set(event.clientId, event.status !== 'disconnected');
   
-  const connected = Array.from(endpointStates.values()).filter(Boolean).length;
-  const total = endpointStates.size;
+  const connected = Array.from(clientStates.values()).filter(Boolean).length;
+  const total = clientStates.size;
   
   console.log(`Connection status: ${connected}/${total} endpoints active`);
 });
@@ -347,10 +349,29 @@ pool.on('duplicate', (dup) => logEvent('DUPLICATE', {
   source: dup.source.split('.')[0] 
 }));
 pool.on('endpoint', (ep) => logEvent('ENDPOINT', { 
-  endpoint: ep.endpoint.split('.')[0], 
+  clientId: ep.clientId,
+  endpoint: ep.endpoint, // full URL
   status: ep.status 
 }));
 pool.on('error', (err) => logEvent('ERROR', err.message));
+```
+
+### Duplicate URL Support
+
+You can add the same endpoint URL multiple times. Each connection is tracked independently with a unique `clientId` and emits distinct `endpoint` events.
+
+```typescript
+const pool = new GrpcPool({
+  endpoints: [
+    { endpoint: 'https://solana-yellowstone-grpc.publicnode.com', token: '', ping: true },
+    { endpoint: 'https://solana-yellowstone-grpc.publicnode.com', token: '', ping: true }
+  ]
+});
+
+pool.on('endpoint', (e) => {
+  // Example: "client-2 https://solana-yellowstone-grpc.publicnode.com: CONNECTED"
+  console.log(`${e.clientId} ${e.endpoint}: ${e.status.toUpperCase()}`);
+});
 ```
 
 ## Configuration

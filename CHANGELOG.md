@@ -15,3 +15,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Updated package name in README to use `@stalkchain/grpc-pool`
 - Added proper import examples for both TypeScript/ES Modules and CommonJS
+
+## [1.1.2] - 2025-09-04
+
+### Added
+- Per-connection unique `clientId` to fully support duplicate endpoint URLs
+- `EndpointEvent` now includes `clientId` for precise per-connection monitoring
+- `GrpcPool.getStatus()` now returns `{ clientId, endpoint, connected, timeSinceLastMessage? }`
+
+### Changed
+- Examples updated to log full endpoint URLs instead of short names
+- `examples/pool-monitoring.ts` tracks connection states by `clientId`
+- README event docs updated to include `clientId` and duplicate URL support
+
+### Fixed
+- Monitoring summary parsing no longer treats `client-#` as a delimiter; uses `::` safely

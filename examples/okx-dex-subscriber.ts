@@ -114,7 +114,7 @@ async function main() {
     console.log('='.repeat(80));
     console.log(`📅 Timestamp: ${timestamp}`);
     console.log(`🔗 Signature: ${event.signature}`);
-    console.log(`📡 Source: ${event.source.replace('https://', '')}`);
+    console.log(`📡 Source: ${event.source}`);
     
     // Process and debuffer the raw transaction data
     const debufferedData = debufferMessage(event.data);
@@ -156,7 +156,7 @@ async function main() {
   pool.on('duplicate', (event: DuplicateEvent) => {
     duplicateCount++;
     const timestamp = new Date(event.timestamp).toISOString();
-    console.log(`🔄 [${timestamp}] Filtered duplicate from ${event.source.replace('https://', '')}`);
+    console.log(`🔄 [${timestamp}] Filtered duplicate from ${event.source}`);
   });
 
   // === CONNECTION EVENT HANDLERS ===
@@ -170,10 +170,9 @@ async function main() {
 
   pool.on('endpoint', (event: EndpointEvent) => {
     const timestamp = new Date(event.timestamp).toISOString();
-    const shortEndpoint = event.endpoint.replace('https://', '').split('.')[0];
     const statusIcon = event.status === 'connected' ? '🟢' : 
                       event.status === 'reconnected' ? '🔄' : '🔴';
-    console.log(`${statusIcon} [${timestamp}] ${shortEndpoint}: ${event.status.toUpperCase()}`);
+    console.log(`${statusIcon} [${timestamp}] ${event.endpoint} [${event.clientId}]: ${event.status.toUpperCase()}`);
   });
 
   // === ERROR HANDLER ===

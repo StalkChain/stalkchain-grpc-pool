@@ -7,7 +7,7 @@
  *
  * @module lib/client
  * @author StalkChain Team
- * @version 1.1.1
+ * @version 1.1.2
  */
 
 import { EventEmitter } from 'events';
@@ -15,12 +15,16 @@ import Client from '@triton-one/yellowstone-grpc';
 import { PoolEndpoint, SubscribeRequest, StreamData } from '../types';
 import { DEFAULT_CONFIG } from '../constants';
 
+// Simple incremental ID generator to uniquely identify each client instance
+let nextClientId = 1;
+
 /**
  * Simple wrapper for a single gRPC client with infinite retry and stale detection
  */
 export class GrpcClient extends EventEmitter {
   private client: Client;
   private endpoint: PoolEndpoint;
+  private clientId: string;
   private connected: boolean = false;
   private stream: any = null;
   private retryAttempts: number = 0;
@@ -42,6 +46,7 @@ export class GrpcClient extends EventEmitter {
   }) {
     super();
     this.endpoint = endpoint;
+    this.clientId = `client-${nextClientId++}`;
     this.client = new Client(endpoint.endpoint, endpoint.token, {});
     this.lastMessageTimestamp = Date.now(); // Initialize to current time
     
@@ -297,6 +302,13 @@ export class GrpcClient extends EventEmitter {
    */
   getEndpoint(): PoolEndpoint {
     return this.endpoint;
+  }
+
+  /**
+   * Get unique client identifier
+   */
+  getId(): string {
+    return this.clientId;
   }
 
   /**

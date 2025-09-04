@@ -6,7 +6,7 @@
  *
  * @module stalkchain-grpc-pool
  * @author StalkChain Team
- * @version 0.1.0
+ * @version 1.1.2
  */
 
 export { GrpcPool } from './lib/pool';
